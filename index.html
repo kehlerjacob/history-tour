@@ -48,16 +48,44 @@
             border-radius: 2px;
         }
 
-        /* Ensure the custom arrow marker is positioned correctly by Leaflet */
+        /* User Marker Arrow */
         .user-arrow-marker {
-            /* Leaflet sets position, we ensure the content inside is centered */
             display: flex;
             align-items: center;
             justify-content: center;
+            width: 40px !important;
+            height: 40px !important;
+            margin-left: -20px !important;
+            margin-top: -20px !important;
+        }
+
+        /* Message Box for custom alerts */
+        #messageBox {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 5000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+        #messageBox.visible {
+            opacity: 1;
+            pointer-events: auto;
         }
     </style>
 </head>
 <body class="flex flex-col h-screen overflow-hidden">
+
+    <!-- Message Box (Custom Alert) -->
+    <div id="messageBox" class="p-6 bg-white rounded-xl shadow-2xl max-w-sm w-full">
+        <h3 id="messageTitle" class="text-lg font-bold mb-2 text-gray-800">Alert</h3>
+        <p id="messageText" class="text-sm text-gray-600 mb-4">Content</p>
+        <button onclick="document.getElementById('messageBox').classList.remove('visible')" class="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700">
+            OK
+        </button>
+    </div>
 
     <!-- Header -->
     <header class="bg-indigo-600 shadow-xl z-50 p-4 flex flex-col gap-3 flex-none">
@@ -76,7 +104,7 @@
                     <input type="range" id="radiusSlider" min="1" max="20" step="1" value="10" class="w-full md:w-48">
                     <span id="radiusValue" class="text-white font-bold text-sm w-16 text-right">10 mi</span>
 
-                    <button id="compassPermissionButton" class="bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-bold py-2 px-3 rounded-lg shadow transition whitespace-nowrap hidden">
+                    <button id="compassPermissionButton" class="bg-red-500 hover:bg-red-400 text-white text-sm font-bold py-2 px-3 rounded-lg shadow transition whitespace-nowrap hidden">
                         Enable Compass
                     </button>
                 </div>
@@ -125,26 +153,26 @@
         <span class="text-sm font-medium text-gray-700" id="locationStatusText">Locating...</span>
     </div>
 
-    <!-- NAVIGATION PANEL (Green Bar - New Unified UI) -->
-    <div id="navigationPanel" class="fixed inset-x-0 bottom-0 bg-green-600 text-white p-4 sm:p-6 shadow-2xl rounded-t-3xl transition-all duration-300 transform translate-y-full opacity-0 z-[2000]">
+    <!-- NAVIGATION PANEL (Green Bar - Fixed to Bottom) -->
+    <div id="navigationPanel" class="fixed inset-x-0 bottom-0 bg-green-600 text-white p-4 sm:p-6 shadow-2xl rounded-t-3xl transition-all duration-300 transform translate-y-full opacity-0 z-[2000] h-48 sm:h-auto">
         <div class="max-w-xl mx-auto flex flex-col h-full">
 
             <!-- Current Step Display -->
-            <div class="flex items-center space-x-3 mb-2">
+            <div class="flex items-start space-x-3 mb-2">
                 <!-- Icon: Placeholder for a directional icon -->
-                <svg class="w-6 h-6 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.41-7-7.38 0-.47.05-.93.14-1.39l5.86 5.86v2.91zm5.93-5.07l-5.86-5.86c.46-.09.92-.14 1.39-.14 3.97 0 6.89 3.05 7.38 7zm-5.93-10.79l5.86 5.86c-.46.09-.92-.14-1.39-.14-3.97 0-6.89-3.05-7.38-7zm-5.93 5.07l5.86 5.86c-.46.09-.92-.14-1.39-.14-3.97 0-6.89-3.05-7.38-7z"/></svg>
-                <h2 id="currentNavInstruction" class="text-xl sm:text-2xl font-semibold truncate">Waiting for Tour...</h2>
+                <svg id="navInstructionIcon" class="w-6 h-6 flex-shrink-0 mt-1" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.41-7-7.38 0-.47.05-.93.14-1.39l5.86 5.86v2.91zm5.93-5.07l-5.86-5.86c.46-.09.92-.14 1.39-.14 3.97 0 6.89 3.05 7.38 7zm-5.93-10.79l5.86 5.86c-.46.09-.92-.14-1.39-.14-3.97 0-6.89-3.05-7.38-7zm-5.93 5.07l5.86 5.86c-.46.09-.92-.14-1.39-.14-3.97 0-6.89-3.05-7.38-7z"/></svg>
+                <h2 id="currentNavInstruction" class="text-xl sm:text-2xl font-semibold leading-tight">Waiting for Tour...</h2>
             </div>
             
             <!-- Next Steps & Progress -->
-            <div class="flex justify-between items-end mt-1 mb-4">
-                <p id="nextLandmarkInfo" class="text-sm opacity-90">Please start a tour using the button above.</p>
-                <p id="navStepCounter" class="text-sm font-medium opacity-80 flex-shrink-0">0/0</p>
+            <div class="flex justify-between items-end mt-1 mb-4 border-t border-green-500 pt-3">
+                <p id="nextLandmarkInfo" class="text-sm opacity-90 leading-relaxed max-w-[70%]">Next: Please start a tour using the button above.</p>
+                <p id="navStepCounter" class="text-sm font-medium opacity-80 flex-shrink-0 ml-4">0/0</p>
             </div>
 
             <!-- Action Button -->
             <div class="flex-grow flex items-end">
-                <button id="navActionButton" onclick="nextLandmark()" class="w-full bg-white text-green-700 font-bold py-3 px-6 rounded-full shadow-lg hover:bg-gray-200 transition duration-150 transform hover:scale-[1.01] focus:outline-none focus:ring-4 focus:ring-green-400 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                <button id="navActionButton" onclick="nextSegment()" class="w-full bg-white text-green-700 font-bold py-3 px-6 rounded-full shadow-lg hover:bg-gray-200 transition duration-150 transform hover:scale-[1.01] focus:outline-none focus:ring-4 focus:ring-green-400 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
                     Next Landmark (Wait for Arrival)
                 </button>
             </div>
@@ -208,7 +236,7 @@
         const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6Ijg1ZWRmZjY2Y2VkZTRkOWVhMmI4NDliNTMxOThhYTY0IiwiaCI6Im11cm11cjY0In0="; 
         const ORS_URL_BASE = "https://api.openrouteservice.org/v2/directions";
         const ORS_PROFILE = "foot-walking";
-        const PROXIMITY_THRESHOLD_METERS = 30.5; // ~100 feet
+        const PROXIMITY_THRESHOLD_METERS = 30; // 30 meters is a good arrival threshold
         
         // App State
         let map = null;
@@ -230,15 +258,15 @@
         // --- TOUR STATE ---
         let isTourActive = false;
         let tourPoints = []; // The list of landmark objects to visit in order
-        let currentStopIndex = -1; // Index of the landmark we are currently traveling TOWARDS
+        let currentSegmentIndex = -1; // Index of the segment (route between two stops) we are currently navigating.
         let geoWatchId = null; // ID for navigator.geolocation.watchPosition
-        let tourPolyline = null; // Reference to the displayed route line
+        let tourPolyline = null; // Reference to the displayed overall route line
         let currentTargetMarker = null; // Marker for the next target landmark
         let initialUserLocationSet = false; // Flag to track if we've successfully got a GPS fix
-
-        // Instructions State
-        let tourInstructionsList = []; // Array of instructions for the CURRENT leg
-        let currentInstructionIndex = -1; // Index within the tourInstructionsList array
+        
+        // Instruction State for the CURRENT segment (e.g., from Stop 1 to Stop 2)
+        let currentSegmentInstructions = []; // Array of detailed turn-by-turn instructions for the current leg
+        let currentInstructionIndex = -1; // Index of the turn-by-turn instruction the user is currently following
 
         // --- FIREBASE SETUP ---
         function initializeFirebase() {
@@ -254,6 +282,19 @@
                         } catch (e) { console.error(e); }
                     }
                 });
+            }
+        }
+
+        // --- CUSTOM MESSAGE BOX ---
+        function showMessageBox(title, message, isError = false) {
+            const box = document.getElementById('messageBox');
+            document.getElementById('messageTitle').textContent = title;
+            document.getElementById('messageText').textContent = message;
+            box.classList.add('visible');
+            if (isError) {
+                document.getElementById('messageTitle').classList.add('text-red-600');
+            } else {
+                document.getElementById('messageTitle').classList.remove('text-red-600');
             }
         }
 
@@ -282,8 +323,7 @@
                 if (!isContinuous) {
                     setTimeout(() => { el.classList.add('opacity-0', 'pointer-events-none'); }, 4000);
                 }
-            } else { // Handle tourStatus (not used in this version, relying on locationStatus)
-                // Fallback to console for tourStatus if needed
+            } else { 
                 console.log(`Tour Status: ${msg}`);
             }
         }
@@ -294,11 +334,13 @@
                 const svg = markerElement ? markerElement.querySelector('svg') : null;
                 
                 if (svg) {
+                    // Apply rotation. heading is 0-360.
+                    // Leaflet/CSS handles the transformation
                     svg.style.transform = `rotate(${heading}deg)`;
                 }
             }
         }
-
+        
         function addUserMarker() {
             if (!map) return;
             if (userLocationMarker) map.removeLayer(userLocationMarker);
@@ -306,7 +348,7 @@
             // Custom Arrow Icon HTML (filled triangle pointing up)
             const arrowSVG = `
                 <div style="background-color: white; border-radius: 50%; padding: 5px; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
-                    <svg viewBox="0 0 100 100" fill="#4f46e5" class="w-full h-full" style="width: 20px; height: 20px; transition: transform 0.1s ease-out;">
+                    <svg viewBox="0 0 100 100" fill="#4f46e5" class="w-full h-full" style="width: 20px; height: 20px; transition: transform 0.1s ease-out; transform: rotate(${currentHeading}deg);">
                         <path d="M50 10 L 90 90 L 10 90 Z" />
                     </svg>
                 </div>
@@ -330,47 +372,80 @@
         
         function startOrientationTracking() {
             if (isCompassInitialized) return;
-            isCompassInitialized = true;
 
             if (window.DeviceOrientationEvent) {
                 window.addEventListener('deviceorientation', (event) => {
                     let heading = null;
                     
-                    if (event.webkitCompassHeading) {
+                    if (event.webkitCompassHeading !== undefined) {
+                        // iOS specific
                         heading = event.webkitCompassHeading; 
                     } else if (event.alpha !== null) {
+                        // Standard W3C (360 - alpha for North reference)
                         heading = 360 - event.alpha;
                     }
 
-                    if (heading !== null && Math.abs(heading - currentHeading) > 1) { 
-                        currentHeading = heading;
-                        updateStatus(`Loc: (${currentLat.toFixed(4)}, ${currentLng.toFixed(4)}) | Heading: ${currentHeading.toFixed(0)}°`, false, true); 
-                        updateMarkerRotation(currentHeading);
+                    if (heading !== null) { 
+                        // Only update if change is significant to avoid jitter
+                        if (Math.abs(heading - currentHeading) > 1) { 
+                            currentHeading = heading;
+                            updateStatus(`Loc: (${currentLat.toFixed(4)}, ${currentLng.toFixed(4)}) | Heading: ${currentHeading.toFixed(0)}°`, false, true); 
+                            updateMarkerRotation(currentHeading);
+                        }
                     }
                 }, false);
+                isCompassInitialized = true;
+                document.getElementById('compassPermissionButton').classList.add('hidden');
+                updateStatus("Compass is now enabled.", false, true);
             } else {
                 console.warn("DeviceOrientationEvent not supported. Heading arrow rotation disabled.");
-                updateStatus("Compass feature unsupported on this device/browser.", true, true);
+                showMessageBox("Compass Warning", "DeviceOrientationEvent not supported. The user location arrow will not rotate with your physical heading.", true);
+                document.getElementById('compassPermissionButton').classList.add('hidden');
             }
         }
 
         async function requestCompassPermission() {
-            // ... (Compass permission logic remains the same) ...
+            const button = document.getElementById('compassPermissionButton');
+            button.disabled = true;
+            
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const permissionState = await DeviceOrientationEvent.requestPermission();
+                    if (permissionState === 'granted') {
+                        startOrientationTracking();
+                    } else {
+                        showMessageBox("Permission Denied", "Compass feature requires device orientation permission.", true);
+                        button.disabled = false;
+                    }
+                } catch (error) {
+                    console.error("Device orientation permission error:", error);
+                    showMessageBox("Permission Error", "Could not request device orientation permission.", true);
+                    button.disabled = false;
+                }
+            } else {
+                // For non-iOS/standard browsers, just attempt to start
+                startOrientationTracking();
+            }
         }
 
         function startPermissionCheck() {
             const button = document.getElementById('compassPermissionButton');
+            
+            // Check if permission request is required (usually on iOS 13+ in secure contexts)
             if (typeof DeviceOrientationEvent.requestPermission === 'function') {
                 button.classList.remove('hidden');
                 button.addEventListener('click', requestCompassPermission);
                 updateStatus("Tap 'Enable Compass' to see your heading.", false, true);
             } else {
+                // Otherwise, try to start tracking directly
+                button.classList.add('hidden');
                 startOrientationTracking();
             }
         }
 
         // --- Core Geolocation Logic ---
         function getUserLocation() {
+            // ... (getUserLocation logic remains the same) ...
             if (!navigator.geolocation) {
                 updateStatus(`Geolocation not supported. Showing default location: ${currentLocationName}.`, true);
                 if (map) fetchNearbyLandmarks(); 
@@ -420,6 +495,7 @@
         }
         
         function getBoundingBox(lat, lng, radiusMiles) {
+            // ... (getBoundingBox logic remains the same) ...
             const latChange = radiusMiles / 69.0;
             const lngChange = radiusMiles / (69.0 * Math.cos(lat * Math.PI / 180));
             const precision = 4; 
@@ -432,7 +508,7 @@
         }
 
         async function fetchNearbyLandmarks() {
-            // ... (Landmark fetching logic remains the same) ...
+            // ... (fetchNearbyLandmarks logic remains the same) ...
             if (!map) return;
             
             console.log(`DEBUG: Starting search at Lat: ${currentLat}, Lng: ${currentLng} with Radius: ${currentRadiusMiles} miles.`);
@@ -495,7 +571,7 @@ out center;
         }
 
         function displayLandmarks(elements) {
-            // ... (Landmark display logic remains the same) ...
+            // ... (displayLandmarks logic remains the same) ...
             if (!map) return;
             
             if (!markersLayerGroup) {
@@ -547,6 +623,7 @@ out center;
 
         // Haversine formula to calculate distance between two lat/lng points in meters
         function calculateDistance(lat1, lon1, lat2, lon2) {
+            // ... (calculateDistance logic remains the same) ...
             const R = 6371000; // Radius of Earth in meters
             const dLat = (lat2 - lat1) * (Math.PI / 180);
             const dLon = (lon2 - lon1) * (Math.PI / 180);
@@ -556,40 +633,6 @@ out center;
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
             return R * c; // Distance in meters
         }
-        
-        // Simple directional helpers (Mocking complex geocoding output)
-        function getCardinalDirection(lat1, lon1, lat2, lon2) {
-            const angle = Math.atan2(lon2 - lon1, lat2 - lat1) * (180 / Math.PI);
-            if (angle >= -22.5 && angle < 22.5) return 'North';
-            if (angle >= 22.5 && angle < 67.5) return 'North-East';
-            if (angle >= 67.5 && angle < 112.5) return 'East';
-            if (angle >= 112.5 && angle < 157.5) return 'South-East';
-            if (angle >= 157.5 || angle < -157.5) return 'South';
-            if (angle >= -157.5 && angle < -112.5) return 'South-West';
-            if (angle >= -112.5 && angle < -67.5) return 'West';
-            return 'North-West';
-        }
-        function getOppositeDirection(direction) {
-            const map = {'North': 'South', 'South': 'North', 'East': 'West', 'West': 'East', 'North-East': 'South-West', 'North-West': 'South-East', 'South-East': 'North-West', 'South-West': 'North-East'};
-            return map[direction] || '';
-        }
-        
-        // Function to generate a simulated step-by-step route
-        function generateMockInstructions(startLat, startLng, endLat, endLng, landmarkName) {
-            // This simulates 3 instructional steps + 1 arrival step.
-            const distance = calculateDistance(startLat, startLng, endLat, endLng);
-            const direction = getCardinalDirection(startLat, startLng, endLat, endLng);
-            const steps = [];
-            const distanceString = "000"; // Placeholder distance updated dynamically in watchPositionSuccess
-
-            steps.push(`Head ${direction} on Main Trail for ${distanceString} meters.`);
-            steps.push(`Turn ${getOppositeDirection(direction).includes('South') ? 'Right' : 'Left'} onto 'Historic Marker Lane'.`);
-            steps.push(`Proceed past the fountain for ${distanceString} meters.`);
-            steps.push(`ARRIVE: You are approaching ${landmarkName}. Look for the marker.`);
-            
-            return steps;
-        }
-
 
         // Success callback for navigator.geolocation.watchPosition
         function watchPositionSuccess(position) {
@@ -599,54 +642,93 @@ out center;
             // 1. Update User Marker location and center map
             if (userLocationMarker) {
                 userLocationMarker.setLatLng([currentLat, currentLng]);
-                map.setView([currentLat, currentLng], 18, {animate: true});
+                // Only pan the map if the user is in an active tour segment
+                if (isTourActive) {
+                    map.setView([currentLat, currentLng], 18, {animate: true, duration: 0.5});
+                }
             } else {
                 addUserMarker();
             }
 
-            // 2. Proximity Check and Instruction Update
-            if (isTourActive && currentStopIndex < tourPoints.length) {
-                const target = tourPoints[currentStopIndex];
-                const distanceMeters = calculateDistance(currentLat, currentLng, target.lat, target.lon);
+            // 2. Navigation State Update and Proximity Check
+            if (isTourActive && currentSegmentIndex < tourPoints.length) {
+                const target = tourPoints[currentSegmentIndex];
+                const distanceToTarget = calculateDistance(currentLat, currentLng, target.lat, target.lon);
                 
-                // Update instruction panel with dynamic distance
-                let currentInstruction = tourInstructionsList[currentInstructionIndex];
+                // Get the current turn instruction for display
+                const currentInstruction = currentSegmentInstructions[currentInstructionIndex];
                 
-                // Only update distance if it's not the final ARRIVE instruction
-                if (!currentInstruction.includes('ARRIVE')) {
-                     // Replace the placeholder distance (000) or any previous number in meters
-                    currentInstruction = currentInstruction.replace(/for ([\d\.]+) meters|for 000 meters/, `for ${distanceMeters.toFixed(0)} meters`);
-                }
+                // --- Instruction Update Logic ---
+                let instructionText = "Getting directions...";
+                let nextInstructionText = "Calculating next step...";
+                let distanceToNextManeuver = 0; // Distance to the end of the current instruction segment
                 
-                document.getElementById('currentNavInstruction').textContent = currentInstruction;
-
-                // Proximity Check
-                if (distanceMeters <= PROXIMITY_THRESHOLD_METERS) {
-                    // You've arrived at the current target landmark!
+                // The current instruction is the one we are *working on*
+                if (currentInstruction) {
+                    const instructionDistance = currentInstruction.distance; 
+                    const instructionCoordinates = currentInstruction.start_coords; // The starting point of the instruction's segment
                     
+                    // The distance remaining in the current instruction's segment
+                    const distanceSinceStart = calculateDistance(currentLat, currentLng, instructionCoordinates[1], instructionCoordinates[0]);
+                    distanceToNextManeuver = instructionDistance - distanceSinceStart;
+
+                    // Clamp to 0 and format: "In [X] meters, [Action]"
+                    const remainingMeters = Math.max(0, distanceToNextManeuver).toFixed(0);
+                    const instructionAction = currentInstruction.text;
+                    instructionText = `In ${remainingMeters} meters: ${instructionAction}`;
+                    
+                    // Next instruction hint
+                    const nextInstruction = currentSegmentInstructions[currentInstructionIndex + 1];
+                    if (nextInstruction) {
+                         nextInstructionText = `Next: ${nextInstruction.text.substring(0, 50)}`;
+                    } else {
+                        nextInstructionText = `Approaching final stop: ${target.tags.name || "Landmark"}`;
+                    }
+                    
+                    // Update UI elements
+                    document.getElementById('currentNavInstruction').textContent = instructionText;
+                    document.getElementById('nextLandmarkInfo').textContent = nextInstructionText;
+                }
+
+                // --- Instruction Segment Advance Logic ---
+                // If user has passed the point of the current maneuver (distance remaining is ~0 or negative)
+                if (distanceToNextManeuver < 10 && currentInstructionIndex < currentSegmentInstructions.length - 1) {
+                    currentInstructionIndex++;
+                    updateNavigationPanelUI(distanceToTarget.toFixed(0)); // Recalculate instruction display
+                }
+
+                // --- Proximity Check (Arrival at Landmark) ---
+                if (distanceToTarget <= PROXIMITY_THRESHOLD_METERS) {
                     // 1. Update instruction to ARRIVE
                     document.getElementById('currentNavInstruction').textContent = `ARRIVED: You have reached ${target.tags.name || 'the landmark'}!`;
+                    document.getElementById('nextLandmarkInfo').textContent = "Tap 'Next Landmark' to calculate the route to the next stop.";
                     
-                    // 2. Enable the action button to proceed to the next landmark
-                    document.getElementById('navActionButton').textContent = `Next Landmark (${currentStopIndex + 1}/${tourPoints.length})`;
+                    // 2. Enable the action button to proceed to the next segment
+                    document.getElementById('navActionButton').textContent = `Next Landmark (${currentSegmentIndex + 1}/${tourPoints.length})`;
                     document.getElementById('navActionButton').disabled = false;
                     
-                    // Remove target marker when arrived
+                    // Remove target marker when arrived (optional: could keep until moved to next segment)
                     if (currentTargetMarker) map.removeLayer(currentTargetMarker);
+                    currentTargetMarker = null;
 
                 } else {
-                    // Re-disable the button if the user drifts out of proximity
-                    document.getElementById('navActionButton').textContent = `Next Landmark (Wait for Arrival - ${distanceMeters.toFixed(0)}m)`;
+                    // Re-disable the button and update distance if outside proximity
+                    document.getElementById('navActionButton').textContent = `Next Landmark (Wait for Arrival - ${distanceToTarget.toFixed(0)}m)`;
                     document.getElementById('navActionButton').disabled = true; 
                 }
+                
+                // Always update the overall step counter
+                document.getElementById('navStepCounter').textContent = `Stop ${currentSegmentIndex + 1}/${tourPoints.length}`;
+
             }
         }
 
         // Error callback for navigator.geolocation.watchPosition
         function watchPositionError(error) {
+            // ... (watchPositionError logic remains the same) ...
             console.error("Watch Position Error:", error);
             if (isTourActive) {
-                 document.getElementById('currentNavInstruction').textContent = "ERROR: GPS signal lost or denied.";
+                 document.getElementById('currentNavInstruction').textContent = "ERROR: GPS signal lost or denied. Check your device settings.";
             } else {
                 updateStatus("GPS Error: Could not get precise location.", true, true);
             }
@@ -666,55 +748,55 @@ out center;
 
         // Updates the instructions shown in the green bar
         function updateNavigationPanelUI() {
-            if (currentStopIndex >= tourPoints.length) {
+            // This function is mostly handled by watchPositionSuccess now for real-time distance updates
+            // It still handles the final arrival/completion state.
+            if (currentSegmentIndex >= tourPoints.length) {
                 document.getElementById('currentNavInstruction').textContent = "Tour Complete! You have arrived at the final destination.";
                 document.getElementById('nextLandmarkInfo').textContent = "Enjoy your visit!";
                 document.getElementById('navStepCounter').textContent = `${tourPoints.length}/${tourPoints.length}`;
                 document.getElementById('navActionButton').textContent = "End Tour";
                 document.getElementById('navActionButton').disabled = false;
-                return;
             }
-
-            // Current landmark target
-            const targetLandmark = tourPoints[currentStopIndex];
-            const targetName = targetLandmark.tags.name || targetLandmark.tags.historic || "Landmark";
-            
-            // Instruction updates (Show the current primary instruction)
-            const currentInstruction = tourInstructionsList[currentInstructionIndex];
-            document.getElementById('currentNavInstruction').textContent = currentInstruction;
-
-            // Next instruction hint
-            const nextInstruction = tourInstructionsList[currentInstructionIndex + 1];
-            if (nextInstruction) {
-                document.getElementById('nextLandmarkInfo').textContent = `Next Instruction: ${nextInstruction.substring(0, 40)}...`;
-            } else {
-                document.getElementById('nextLandmarkInfo').textContent = `Approaching: ${targetName}`;
-            }
-
-            // Progress
-            document.getElementById('navStepCounter').textContent = `Stop ${currentStopIndex + 1}/${tourPoints.length}`;
         }
         
-        window.nextLandmark = function() {
-            currentStopIndex++; // Move to the next landmark
+        // Advances to the next landmark segment
+        window.nextSegment = async function() {
+            currentSegmentIndex++; // Move to the next landmark target
 
-            if (currentStopIndex < tourPoints.length) {
-                // Recalculate instructions for the next leg (user location -> new target)
-                const currentTarget = tourPoints[currentStopIndex];
-                tourInstructionsList = generateMockInstructions(currentLat, currentLng, currentTarget.lat, currentTarget.lon, currentTarget.tags.name || "Landmark");
-                currentInstructionIndex = 0; // Start at the first instruction
-                
-                setNextTargetMarker(); // Update the red marker on the map
-                updateNavigationPanelUI();
-                
-                updateStatus(`Moving to stop ${currentStopIndex + 1}/${tourPoints.length}.`, false);
-                
-                // Disable button until proximity is reached for the new landmark
-                document.getElementById('navActionButton').textContent = 'Next Landmark (Wait for Arrival)';
+            if (currentSegmentIndex < tourPoints.length) {
+                const currentTarget = tourPoints[currentSegmentIndex];
+                const targetName = currentTarget.tags.name || "Landmark";
+
+                // 1. Calculate the new route segment and get instructions
+                updateStatus(`Calculating route to ${targetName}...`);
                 document.getElementById('navActionButton').disabled = true;
+                
+                try {
+                    const instructionsResult = await getOrsInstructions(currentLat, currentLng, currentTarget.lat, currentTarget.lon);
+                    currentSegmentInstructions = instructionsResult.instructions;
+                    
+                    if (currentSegmentInstructions.length === 0) {
+                         throw new Error("Route calculated but no turn-by-turn instructions were returned.");
+                    }
+
+                    currentInstructionIndex = 0; // Start at the first instruction of the new segment
+                    
+                    setNextTargetMarker(); // Update the red marker on the map
+                    updateNavigationPanelUI();
+                    
+                    updateStatus(`Moving to stop ${currentSegmentIndex + 1}/${tourPoints.length}. Follow the directions in the green bar.`, false);
+                    
+                    // The button will be re-enabled automatically upon proximity check in watchPositionSuccess
+                    document.getElementById('navActionButton').textContent = 'Next Landmark (Wait for Arrival)';
+
+                } catch (error) {
+                    console.error("Error calculating next segment instructions:", error);
+                    showMessageBox("Route Error", `Could not get directions to ${targetName}. Ending tour. Check console for details.`, true);
+                    stopTour();
+                }
 
             } else {
-                stopTour("Tour complete!");
+                stopTour("Tour complete! Thank you for exploring.");
             }
         }
 
@@ -722,55 +804,44 @@ out center;
         // Starts the continuous GPS tracking and centers map on the user
         window.startTour = function() {
             if (tourPoints.length === 0) {
-                 updateStatus("Please create a tour first (click 'Start Tour' button again and then 'Create').", true);
+                 updateStatus("Please create a tour first (click 'Start Tour' button and then 'Create').", true);
                  return;
             }
             if (!initialUserLocationSet) {
                  getUserLocation();
-                 // If GPS hasn't fixed yet, wait for the callback to start tour
                  if (!initialUserLocationSet) {
                     updateStatus("GPS fix needed. Trying to get location...", true);
                     return;
                  }
             }
 
-            if (isTourActive) return; // Prevent double starting
+            if (isTourActive) return; 
             isTourActive = true;
-            currentStopIndex = 0;
 
-            // 1. Initialize first set of instructions (User to Landmark 1)
-            const firstTarget = tourPoints[0];
-            tourInstructionsList = generateMockInstructions(currentLat, currentLng, firstTarget.lat, firstTarget.lon, firstTarget.tags.name || "Landmark");
-            currentInstructionIndex = 0;
-
-            // 2. Zoom In and Focus
+            // 1. Zoom In and Focus
             map.setView([currentLat, currentLng], 18, {animate: true});
 
-            // 3. Start Continuous GPS Tracking
+            // 2. Start Continuous GPS Tracking
             geoWatchId = navigator.geolocation.watchPosition(
                 watchPositionSuccess, 
                 watchPositionError, 
                 { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
             );
 
-            // 4. Update UI
+            // 3. Update UI
             document.getElementById('startTourButton').textContent = 'End Tour';
             document.getElementById('startTourButton').onclick = stopTour;
 
-            // Show the new navigation panel and update contents
+            // Show the navigation panel
             showNavigationPanel();
-            updateNavigationPanelUI(); // Display first instruction
-            setNextTargetMarker();
             
-            // Hide the configuration panel and old banner
+            // Start the first segment calculation
+            currentSegmentIndex = -1; // Set to -1 so nextSegment starts at 0
+            nextSegment();
+
+            // Hide the configuration panel
             document.getElementById('tourPanel').classList.add('hidden');
-            
-            // Set the action button for the first leg
-            document.getElementById('navActionButton').textContent = 'Next Landmark (Wait for Arrival)';
-            document.getElementById('navActionButton').onclick = nextLandmark;
-            document.getElementById('navActionButton').disabled = true; // Disabled until proximity
-            
-            updateStatus(`Tour started! Head to stop 1 of ${tourPoints.length}.`, false);
+            document.getElementById('navActionButton').onclick = nextSegment;
         }
 
         // Stops the tour and resets state
@@ -781,7 +852,9 @@ out center;
             }
 
             isTourActive = false;
-            currentStopIndex = -1;
+            currentSegmentIndex = -1;
+            currentSegmentInstructions = [];
+            currentInstructionIndex = -1;
             
             // Reset UI
             document.getElementById('startTourButton').textContent = 'Start Tour';
@@ -799,10 +872,11 @@ out center;
 
         // Sets the marker for the next target landmark
         function setNextTargetMarker() {
+            // ... (setNextTargetMarker logic remains the same) ...
             if (currentTargetMarker) map.removeLayer(currentTargetMarker);
             
-            if (currentStopIndex < tourPoints.length) {
-                const nextTarget = tourPoints[currentStopIndex];
+            if (currentSegmentIndex < tourPoints.length) {
+                const nextTarget = tourPoints[currentSegmentIndex];
                 
                 const targetIcon = window.L.icon({
                     iconUrl: 'https://cdn.rawgit.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
@@ -819,19 +893,94 @@ out center;
             }
         }
         
-        // --- TOUR CREATION (Existing Logic) ---
-
-        async function getOrsRouteDistance(coords) {
-            // ... (ORS logic remains the same) ...
-            // Route MUST be: Start -> Closest_L1 -> Closest_L2 -> ... -> Closest_LN -> Start (Loop)
-            const routeCoords = [
-                [currentLng, currentLat], // Start
-                ...coords.map(c => [c.lon, c.lat]), // Intermediate stops
-                [currentLng, currentLat] // End
+        // --- ROUTE & INSTRUCTION FETCHING ---
+        
+        // Fetches detailed step-by-step instructions for a single segment (A to B)
+        async function getOrsInstructions(startLat, startLng, endLat, endLng) {
+             const routeCoords = [
+                [startLng, startLat], 
+                [endLng, endLat]
             ];
 
             const orsPayload = {
                 coordinates: routeCoords,
+                instructions: true, // Crucial for getting step-by-step directions
+                preference: "fastest"
+            };
+            
+            const orsUrlWithKey = `${ORS_URL_BASE}/${ORS_PROFILE}/geojson?api_key=${ORS_API_KEY}`;
+
+            const maxRetries = 3;
+            let attempt = 0;
+            
+            while (attempt < maxRetries) {
+                attempt++;
+                try {
+                    const response = await fetch(orsUrlWithKey, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8', 
+                            'Content-Type': 'application/json; charset=utf-8',
+                        },
+                        body: JSON.stringify(orsPayload)
+                    });
+
+                    if (response.ok) {
+                        const geoJson = await response.json();
+                        const routeSummary = geoJson.features[0].properties.segments?.[0];
+                        if (!routeSummary || !routeSummary.steps) {
+                            throw new Error("ORS returned route but missing steps/instructions.");
+                        }
+                        
+                        // Extract steps: text, distance, and coordinates of the maneuver point
+                        const instructions = routeSummary.steps.map(step => ({
+                            text: step.instruction,
+                            distance: step.distance, // in meters
+                            duration: step.duration, // in seconds
+                            // Coordinates of the *start* of the maneuver segment for tracking progress
+                            start_coords: geoJson.features[0].geometry.coordinates[step.way_points[0]] 
+                        }));
+
+                        return { instructions };
+                    }
+                    
+                    if (response.status === 429 && attempt < maxRetries) {
+                        const delay = Math.pow(2, attempt) * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
+                    }
+
+                    if (!response.ok) {
+                        let errorText = await response.text();
+                        try {
+                            const errorJson = JSON.parse(errorText);
+                            const errorMessage = errorJson.error?.message || `ORS API failed with status ${response.status}`;
+                            throw new Error(errorMessage);
+                        } catch (e) {
+                            throw new Error(`ORS API failed (${response.status}): ${errorText.substring(0, 100)}...`);
+                        }
+                    }
+                } catch (error) {
+                    if (attempt === maxRetries) throw error;
+                    const delay = Math.pow(2, attempt) * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+            throw new Error("Failed to get a successful response from ORS API after retries.");
+        }
+
+
+        async function getOrsRouteDistance(coords) {
+            // ... (getOrsRouteDistance logic remains the same, used for initial tour path calculation) ...
+            const routeCoords = [
+                [currentLng, currentLat], 
+                ...coords.map(c => [c.lon, c.lat]), 
+                [currentLng, currentLat] 
+            ];
+
+            const orsPayload = {
+                coordinates: routeCoords,
+                // Do not request instructions for the complex multi-stop calculation to save payload size
             };
             
             const orsUrlWithKey = `${ORS_URL_BASE}/${ORS_PROFILE}/geojson?api_key=${ORS_API_KEY}`;
@@ -888,7 +1037,7 @@ out center;
 
 
         window.createTour = async function(shouldStartImmediately = false) {
-            
+            // ... (createTour logic remains the same) ...
             const desiredDistanceMiles = parseFloat(document.getElementById('tourDistance').value);
             if (isNaN(desiredDistanceMiles) || desiredDistanceMiles <= 0) {
                 updateStatus("Please enter a valid distance.", true);
@@ -966,7 +1115,7 @@ out center;
             if (routeLayerGroup) routeLayerGroup.clearLayers();
             tourPolyline = window.L.geoJSON(geoJson.features[0], {
                 style: {
-                    color: '#a5b4fc', // Light blue/indigo for planned route
+                    color: '#a5b4fc', 
                     weight: 3,
                     opacity: 0.5
                 },
@@ -989,6 +1138,7 @@ out center;
         }
 
         window.openTourPanel = function() {
+            // ... (openTourPanel logic remains the same) ...
             const panel = document.getElementById('tourPanel');
             panel.classList.toggle('hidden');
             if (!panel.classList.contains('hidden')) {
@@ -1043,6 +1193,7 @@ out center;
         // --- CARD LOGIC (For Pin Click) ---
 
         window.openCard = function(id) {
+            // ... (openCard logic remains the same) ...
             const element = landmarksStore[id];
             if (!element) return;
             const tags = element.tags || {};
