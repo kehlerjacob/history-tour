@@ -56,13 +56,12 @@
 
         <div class="bg-indigo-700 rounded-lg p-3 flex items-center gap-4 w-full md:w-auto">
             <label for="radiusSlider" class="text-white text-sm font-medium whitespace-nowrap">Search Radius:</label>
-            <input type="range" id="radiusSlider" min="1" max="20" step="1" value="3" class="w-full md:w-48">
-            <span id="radiusValue" class="text-white font-bold text-sm w-16 text-right">3 mi</span>
+            <input type="range" id="radiusSlider" min="1" max="20" step="1" value="5" class="w-full md:w-48">
+            <span id="radiusValue" class="text-white font-bold text-sm w-16 text-right">5 mi</span>
         </div>
     </header>
 
     <!-- Map Container -->
-    <!-- Removed relative/z-0 to let Leaflet handle stacking context naturally -->
     <div id="map" class="flex-1 w-full bg-gray-200"></div>
 
     <!-- Location Status -->
@@ -137,9 +136,11 @@
         // Default to Washington D.C. (National Mall)
         let currentLat = 38.8893; 
         let currentLng = -77.0502;
-        let currentRadiusMiles = 3; // Increased default radius
+        let currentRadiusMiles = 5; // Increased default radius
         let markersLayerGroup = null;
         let userLocationMarker = null;
+        let mapMoveTimer = null; // For debouncing map move events
+        const DEBOUNCE_DELAY = 750; // Debounce map move search by 750ms
         
         const landmarksStore = {};
 
@@ -181,7 +182,6 @@
             setTimeout(() => { el.classList.add('opacity-0'); }, 4000);
         }
 
-        // MOVED DEFINITION: Defining addUserMarker before it is called by getUserLocation
         function addUserMarker() {
             if (!map) return;
             if (userLocationMarker) map.removeLayer(userLocationMarker);
@@ -227,6 +227,23 @@
                 { enableHighAccuracy: true, timeout: 10000 }
             );
         }
+        
+        // New handler to search when the map moves
+        function handleMapMove() {
+            clearTimeout(mapMoveTimer);
+            mapMoveTimer = setTimeout(() => {
+                if (!map) return;
+                const center = map.getCenter();
+                const precision = 6;
+                
+                // Only re-search if the center has changed significantly since the last known search location
+                if (Math.abs(center.lat - currentLat) > 1e-6 || Math.abs(center.lng - currentLng) > 1e-6) {
+                    currentLat = parseFloat(center.lat.toFixed(precision));
+                    currentLng = parseFloat(center.lng.toFixed(precision));
+                    fetchNearbyLandmarks();
+                }
+            }, DEBOUNCE_DELAY);
+        }
 
         function getBoundingBox(lat, lng, radiusMiles) {
             const latChange = radiusMiles / 69.0;
@@ -246,7 +263,7 @@
         async function fetchNearbyLandmarks() {
             if (!map) return;
             
-            updateStatus(`Searching within ${currentRadiusMiles} mile(s)...`);
+            updateStatus(`Searching within ${currentRadiusMiles} mile(s) centered at (${currentLat.toFixed(4)}, ${currentLng.toFixed(4)})...`);
 
             const bbox = getBoundingBox(currentLat, currentLng, currentRadiusMiles);
             // Format: xmin,ymin,xmax,ymax (Lng, Lat, Lng, Lat)
@@ -273,17 +290,24 @@
 
             try {
                 const response = await fetch(url);
+                
+                if (response.status === 400) {
+                     // Log 400 error explicitly to catch potential BBOX issues
+                    const errorData = await response.json().catch(() => ({ error: { message: 'Could not parse response for 400 error.' }}));
+                    console.error("NPS API 400 ERROR:", errorData);
+                    updateStatus(`Search failed: Invalid query format.`, true);
+                    return;
+                }
+
                 if (!response.ok) {
-                    const errorData = await response.json();
-                    console.error("NPS API detailed error:", errorData);
-                    throw new Error(`NPS API request failed with status ${response.status}. Message: ${errorData.error.message || 'Unknown error'}`);
+                    throw new Error(`NPS API request failed with status ${response.status}`);
                 }
                 
                 const data = await response.json();
                 
                 if (data.features && data.features.length > 0) {
                     displayLandmarks(data.features);
-                    updateStatus(`Found ${data.features.length} sites`);
+                    updateStatus(`Found ${data.features.length} historic sites`);
                 } else {
                     console.warn("No features returned:", data);
                     updateStatus("No historic sites found nearby", true);
@@ -367,6 +391,9 @@
             }).addTo(map);
 
             markersLayerGroup = window.L.layerGroup().addTo(map);
+            
+            // Attach map move listener for interactive searching
+            map.on('moveend', handleMapMove);
 
             // Start location search
             getUserLocation();
@@ -385,6 +412,10 @@
         });
 
         slider.addEventListener('change', () => {
+            // Trigger search centered on the current map view
+            const center = map.getCenter();
+            currentLat = center.lat;
+            currentLng = center.lng;
             fetchNearbyLandmarks();
         });
 
