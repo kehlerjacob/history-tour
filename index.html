@@ -60,8 +60,8 @@
 
         <div class="bg-indigo-700 rounded-lg p-3 flex items-center gap-4 w-full md:w-auto">
             <label for="radiusSlider" class="text-white text-sm font-medium whitespace-nowrap">Search Radius:</label>
-            <input type="range" id="radiusSlider" min="1" max="20" step="1" value="5" class="w-full md:w-48">
-            <span id="radiusValue" class="text-white font-bold text-sm w-16 text-right">5 mi</span>
+            <input type="range" id="radiusSlider" min="1" max="20" step="1" value="10" class="w-full md:w-48">
+            <span id="radiusValue" class="text-white font-bold text-sm w-16 text-right">10 mi</span>
         </div>
     </header>
 
@@ -140,7 +140,8 @@
         // Default to Washington D.C. (National Mall)
         let currentLat = 38.8893; 
         let currentLng = -77.0502;
-        let currentRadiusMiles = 5; // Increased default radius
+        // Increased default radius to 10 miles for better chance of finding landmarks
+        let currentRadiusMiles = 10; 
         let markersLayerGroup = null;
         let userLocationMarker = null; // Marker for the initial GPS location
         let searchRadiusCircle = null; // Circle to show the search area
@@ -285,7 +286,7 @@
             
             const baseUrl = "https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer/0/query";
             
-            // Ensure we ask for GeoJSON with the correct spatial reference (WGS84 = 4326)
+            // Changed output format to 'json' to avoid potential GeoJSON serialization issues on server
             const params = new URLSearchParams({
                 where: "1=1", 
                 geometry: bboxString,
@@ -295,7 +296,7 @@
                 outSR: "4326", 
                 outFields: "RESNAME,NRIS_Refnum,LISTED_DATE,ADDRESS,CITY,STATE",
                 returnGeometry: "true",
-                f: "geojson", 
+                f: "json", // <-- CHANGED from geojson to json
                 resultRecordCount: "100" // Limit to 100 to avoid overload
             });
 
@@ -323,13 +324,19 @@
                 
                 const data = await response.json();
                 
+                // Check for features in ArcGIS FeatureSet format
                 if (data.features && data.features.length > 0) {
                     // Log 5: Success
                     console.log(`DEBUG: NPS API Success. Found ${data.features.length} features.`, data);
                     displayLandmarks(data.features);
                     updateStatus(`Found ${data.features.length} historic sites`);
-                } else {
-                    // Log 6: No Features
+                } else if (data.error) { 
+                    // Log 6a: Server returned error object (like the 400 error you saw, but with 200 status)
+                     console.error("DEBUG: NPS API Query Failed (Error Object in 200 response):", data.error);
+                     updateStatus(`Search failed: Server error: ${data.error.message}`, true);
+                }
+                else {
+                    // Log 6b: No features found (empty array)
                     console.warn("DEBUG: No features returned from NPS API. Full response data:", data);
                     updateStatus("No historic sites found nearby", true);
                     if (markersLayerGroup) markersLayerGroup.clearLayers();
@@ -341,10 +348,10 @@
             }
         }
 
+        // Updated to handle the ArcGIS FeatureSet JSON format
         function displayLandmarks(features) {
             if (!map) return;
             
-            // Re-initialize layer group if missing
             if (!markersLayerGroup) {
                 markersLayerGroup = window.L.layerGroup().addTo(map);
             } else {
@@ -352,18 +359,19 @@
             }
 
             features.forEach(feature => {
-                // Safety check for geometry
-                if (!feature.geometry || !feature.geometry.coordinates) return;
-
-                const coords = feature.geometry.coordinates;
-                const props = feature.properties;
+                // In ArcGIS JSON format, attributes holds the data, and geometry has x (lng) and y (lat)
+                const props = feature.attributes;
+                const coords = feature.geometry; 
                 
+                // Safety check for geometry
+                if (!coords || typeof coords.x === 'undefined' || typeof coords.y === 'undefined') return;
+
+                const lat = coords.y; // Y is Latitude
+                const lng = coords.x; // X is Longitude
+
                 const id = props.NRIS_Refnum || Math.random().toString(36).substr(2, 9);
                 landmarksStore[id] = props;
 
-                // GeoJSON is [lng, lat]
-                const lat = coords[1];
-                const lng = coords[0];
                 const name = props.RESNAME || "Historic Site";
 
                 // Use default Leaflet marker (classic blue pin)
