@@ -82,6 +82,16 @@
         .leaflet-control-zoom {
             display: none !important;
         }
+
+        /* Icon styling for navigation instructions */
+        .nav-icon {
+            display: inline-block;
+            width: 1.5rem;
+            height: 1.5rem;
+            margin-right: 0.5rem;
+            vertical-align: middle;
+        }
+
     </style>
 </head>
 <body class="flex flex-col h-screen overflow-hidden">
@@ -208,16 +218,18 @@
         let map;
         let userMarker = null;
         let landmarkMarkers = new L.LayerGroup();
-        let tourRoute = null; // Array of {lat, lon, title, ...} objects
+        let tourRoute = null; // Array of {lat, lon, title, steps, ...} objects
         let tourPath = null; // The Leaflet Polyline/Route object
         let tourPoints = []; // Populated by GeoSearch
         const WIKIPEDIA_API_URL = 'https://en.wikipedia.org/w/api.php';
-        const OSRM_API_URL = 'https://router.project-osrm.org/route/v1/foot/';
+        // Using OSRM Public Server for routing
+        const OSRM_API_URL = 'https://router.project-osrm.org/route/v1/foot/'; 
         let isFetching = false; // Prevent multiple concurrent fetches
         
         let currentTourStep = 0; // 0 = ready to start, 1+ = navigating to this stop index
         let watchingPosition = false;
         let watchId = null;
+        let currentManeuverIndex = -1; // Index of the next maneuver in the OSRM steps array
 
         // Custom Marker Icon for User Location (Simple Arrow)
         const userArrowIcon = L.divIcon({
@@ -276,26 +288,31 @@
             return R * c; // Distance in meters
         }
 
-        // --- ROUTING FUNCTION (OSRM) ---
+        // --- ROUTING & NAVIGATION FUNCTIONS ---
+
+        /**
+         * Fetches a detailed walking route with steps from OSRM.
+         */
         const fetchWalkingRoute = async (startLat, startLon, endLat, endLon) => {
+            // OSRM expects coordinates in [lon, lat] format
             const coordinates = `${startLon},${startLat};${endLon},${endLat}`;
-            const url = `${OSRM_API_URL}${coordinates}?geometries=polyline`;
+            // Request polyline geometry AND steps
+            const url = `${OSRM_API_URL}${coordinates}?geometries=polyline&steps=true&overview=full`;
 
             try {
                 const data = await fetchWithRetry(url);
                 if (data.routes && data.routes.length > 0) {
                     const route = data.routes[0];
-                    const distanceMeters = route.distance;
-                    const durationSeconds = route.duration;
-                    const polylineString = route.geometry;
+                    const leg = route.legs[0];
                     
-                    // Decode the polyline string into an array of [lat, lon] pairs
+                    const polylineString = route.geometry;
                     const decodedPath = polyline.decode(polylineString); 
                     
                     return {
                         path: decodedPath,
-                        distance: distanceMeters,
-                        duration: durationSeconds
+                        distance: route.distance,
+                        duration: route.duration,
+                        steps: leg.steps // The turn-by-turn instructions
                     };
                 } else {
                     throw new Error("No route found by OSRM.");
@@ -307,135 +324,62 @@
             }
         }
 
-
-        // --- WIKIPEDIA GEOSEARCH FUNCTION ---
-
-        const fetchAndPinLandmarks = async () => {
-            if (isFetching) return;
-            isFetching = true;
-
-            const mapCenter = map.getCenter();
-            const radiusKm = parseFloat(document.getElementById('radiusSlider').value);
-            const radiusMeters = radiusKm * 1000; 
-            const categoryKeyword = document.getElementById('categoryFilter').value.trim().toLowerCase();
-
-            // Clear previous pins and tour points
-            landmarkMarkers.clearLayers();
-            tourPoints = [];
-            
-            // --- Step 1: GeoSearch (Get nearby page IDs) ---
-            const geoParams = new URLSearchParams({
-                action: 'query',
-                list: 'geosearch',
-                gsradius: radiusMeters,
-                gscoord: `${mapCenter.lat}|${mapCenter.lng}`,
-                gslimit: 50, 
-                format: 'json',
-                origin: '*'
-            });
-
-            const geoUrl = `${WIKIPEDIA_API_URL}?${geoParams.toString()}`;
-
-            try {
-                map.getContainer().style.cursor = 'wait';
-                
-                const geoData = await fetchWithRetry(geoUrl);
-                const searchResults = geoData.query?.geosearch;
-                
-                if (!searchResults || searchResults.length === 0) {
-                     showMessage("No Landmarks", `No places found within ${radiusKm}km of the current map center.`);
-                     return;
-                }
-
-                let pagesToPin = searchResults;
-
-                // --- Step 2: Category Check (if a filter is applied) ---
-                if (categoryKeyword) {
-                    const pageIds = searchResults.map(r => r.pageid).join('|');
-
-                    const categoryParams = new URLSearchParams({
-                        action: 'query',
-                        prop: 'categories',
-                        cllimit: 500, // retrieve up to 500 categories per page
-                        clshow: '!hidden', // ignore hidden categories (optional, but cleaner)
-                        pageids: pageIds,
-                        format: 'json',
-                        origin: '*'
-                    });
-
-                    const categoryUrl = `${WIKIPEDIA_API_URL}?${categoryParams.toString()}`;
-                    const categoryData = await fetchWithRetry(categoryUrl);
-                    const pagesWithCategories = categoryData.query.pages;
-
-                    // --- Step 3: Client-side Filter ---
-                    pagesToPin = searchResults.filter(geoResult => {
-                        const page = pagesWithCategories[geoResult.pageid];
-                        if (!page || !page.categories) return false;
-
-                        return page.categories.some(cat => 
-                            // Check if the category title (e.g., "Category:Historic homes in...") contains the filter keyword
-                            cat.title.toLowerCase().includes(categoryKeyword)
-                        );
-                    });
-                }
-
-                // --- Step 4: Pin Display ---
-                let pinsAdded = 0;
-                pagesToPin.forEach(result => {
-                    const lat = result.lat;
-                    const lon = result.lon;
-                    const title = result.title;
-                    const distance = result.dist; 
-                    const articleUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`;
-
-                    pinsAdded++;
-                    
-                    const marker = L.marker([lat, lon], { icon: landmarkIcon }).bindPopup(`
-                        <div class="font-sans">
-                            <h4 class="text-base font-bold text-red-700 mb-1">${title}</h4>
-                            <p class="text-xs text-gray-600 mb-2">Distance: ${distance.toFixed(0)}m</p>
-                            <a href="${articleUrl}" target="_blank" class="text-indigo-600 hover:text-indigo-800 font-medium text-xs">Read on Wikipedia &rarr;</a>
-                        </div>
-                    `);
-                    landmarkMarkers.addLayer(marker);
-
-                    // Add to tour points list
-                    tourPoints.push({ lat, lon, title, isWiki: true, url: articleUrl });
-                });
-
-                map.addLayer(landmarkMarkers);
-                
-                const message = categoryKeyword
-                    ? `${pinsAdded} filtered places found containing '${categoryKeyword}'.`
-                    : `${pinsAdded} historic places pinned around the center of the map.`;
-
-                // Only show successful message if we are not actively dragging the map
-                if (!map.dragging._map.dragging._enabled) {
-                    // Avoid showing the message box if a tour is active
-                    if (!tourRoute) {
-                        showMessage("Landmarks Updated", message);
-                    }
-                }
-                
-            } catch (error) {
-                console.error('Error fetching data from Wikipedia:', error);
-                showMessage("API Error", "Failed to retrieve historic landmarks from Wikipedia. Check console for details.");
-            } finally {
-                isFetching = false;
-                map.getContainer().style.cursor = '';
+        /**
+         * Finds the next maneuver instruction the user needs to follow.
+         */
+        const findNextManeuver = (userLat, userLon, targetSteps) => {
+            if (!targetSteps || targetSteps.length === 0) {
+                return { instruction: "Continue to your destination.", distance: 0, finished: true };
             }
+
+            let bestStep = targetSteps[targetSteps.length - 1]; // Default to the last step (arrival)
+            let minDistance = Infinity;
+            let maneuverIndex = -1;
+
+            // Iterate through steps, looking for the *closest* maneuver point that hasn't been passed
+            // The OSRM steps contain the maneuver location in the 'location' array (lon, lat)
+            for (let i = 0; i < targetSteps.length; i++) {
+                const step = targetSteps[i];
+                // Step location is [lon, lat]
+                const stepLon = step.maneuver.location[0]; 
+                const stepLat = step.maneuver.location[1];
+                
+                const distanceToStep = getDistance(userLat, userLon, stepLat, stepLon);
+
+                // If the user is close enough (e.g., within 20m) and we haven't checked this one, 
+                // we treat the next one as the current target.
+                if (distanceToStep > 20) {
+                     // Since we iterate sequentially, the first step we find that is > 20m away 
+                     // from the maneuver point is the 'next' one to aim for.
+                     if (distanceToStep < minDistance) {
+                        minDistance = distanceToStep;
+                        bestStep = step;
+                        maneuverIndex = i;
+                        break; // Found the target maneuver
+                     }
+                }
+            }
+            
+            // Handle arrival (last step)
+            if (maneuverIndex === -1 || maneuverIndex === targetSteps.length - 1) {
+                 return { instruction: "Arriving at your destination!", distance: getDistance(userLat, userLon, tourRoute[currentTourStep].lat, tourRoute[currentTourStep].lon), finished: true, index: targetSteps.length - 1 };
+            }
+
+            // Return the instruction and the distance to the maneuver location
+            return { 
+                instruction: bestStep.maneuver.instruction, 
+                distance: minDistance, 
+                finished: false,
+                index: maneuverIndex
+            };
         };
 
 
-        // --- MAP AND GEO LOCATION FUNCTIONS ---
+        // --- MAP & GEO LOCATION LOGIC (same as previous) ---
 
         const initMap = () => {
-            // Initialize map centered on Washington D.C. as default
-            map = L.map('map', { 
-                zoomControl: false // Hides the built-in zoom control
-            }).setView([38.8893, -77.0502], 13);
+            map = L.map('map', { zoomControl: false }).setView([38.8893, -77.0502], 13);
 
-            // Using CartoDB Positron for minimalist style
             L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
                 subdomains: 'abcd',
@@ -443,37 +387,27 @@
             }).addTo(map);
 
             landmarkMarkers.addTo(map);
-
-            // Add custom zoom controls
             L.control.zoom({ position: 'bottomright' }).addTo(map);
-
-            // Fetch pins when the map stops moving
             map.on('moveend', fetchAndPinLandmarks);
 
-            // Update radius value display and trigger new search on release
             const radiusSlider = document.getElementById('radiusSlider');
             radiusSlider.addEventListener('input', (e) => {
                 document.getElementById('radiusValue').textContent = `${e.target.value}km`;
             });
-            // Trigger a search when the user finishes adjusting the slider
             radiusSlider.addEventListener('change', fetchAndPinLandmarks);
 
-            // Start position watching automatically on load
             startWatchingPosition();
-
-            // Initial fetch of pins
             fetchAndPinLandmarks();
         };
 
         const changeLocation = (lat, lng, name) => {
              map.setView([lat, lng], 13);
-             // The 'moveend' event handler will automatically call fetchAndPinLandmarks
              showMessage("Location Changed", `Map centered on ${name}. Loading local historic places...`);
         };
         
         const startWatchingPosition = () => {
             if (watchingPosition) return;
-
+            // ... (rest of startWatchingPosition remains the same)
             if ('geolocation' in navigator) {
                 watchingPosition = true;
                 document.getElementById('locationStatus').classList.add('opacity-100', 'pointer-events-auto');
@@ -502,6 +436,10 @@
                 map.setView(newLatLong, map.getZoom() > 14 ? map.getZoom() : 15);
             } else {
                 userMarker.setLatLng(newLatLong);
+                // In navigation mode, pan the map to keep the user centered
+                if (currentTourStep > 0 && currentTourStep < tourRoute.length) {
+                    map.panTo(newLatLong, {animate: true, duration: 1.0});
+                }
             }
 
             // Update compass direction if available
@@ -510,7 +448,7 @@
                 arrow.style.transform = `rotate(${heading}deg)`;
             }
 
-            // Handle tour progression
+            // Handle tour progression and instruction updates
             checkTourProgress(newLatLong);
         };
 
@@ -521,15 +459,15 @@
             watchingPosition = false;
         };
 
-        // --- TOUR FUNCTIONS ---
+
+        // --- TOUR CONFIGURATION & INITIAL ROUTE DRAWING ---
 
         const openTourPanel = () => {
             document.getElementById('tourPanel').classList.toggle('hidden');
         }
 
         const createTour = (reset=false) => {
-            console.log("Attempting to create tour...");
-
+            // ... (rest of createTour remains the same, calculating initial route)
             const maxDistanceMiles = parseFloat(document.getElementById('tourDistance').value);
             const maxDistanceMeters = maxDistanceMiles * 1609.34;
             
@@ -539,10 +477,8 @@
                 return;
             }
 
-            // Reference point: User location (if available) or current map center (fallback)
             const refLatLong = userMarker ? userMarker.getLatLng() : map.getCenter();
             
-            // Start point in consistent format {lat, lon}
             const startPoint = {
                 lat: refLatLong.lat,
                 lon: refLatLong.lng, 
@@ -551,7 +487,6 @@
                 url: null
             };
 
-            // 2. Filter landmarks within the specified tour distance range
             let potentialStops = tourPoints.filter(p => {
                 const distance = getDistance(startPoint.lat, startPoint.lon, p.lat, p.lon);
                 return distance <= maxDistanceMeters; 
@@ -560,38 +495,35 @@
                 distance: getDistance(startPoint.lat, startPoint.lon, p.lat, p.lon)
             }));
 
-            // 3. Final check: do we have enough *local* stops for a tour?
             if (potentialStops.length < 2) {
                 document.getElementById('tourStatus').textContent = `Error: Only ${potentialStops.length} pins available locally.`;
                 showMessage("Tour Failed: Pins Too Far", `Only ${potentialStops.length} landmarks found within ${maxDistanceMiles} miles of the starting point. Try increasing the Max Tour Distance in this panel.`);
                 return;
             }
             
-            // Sort by proximity and select the 5 closest
             potentialStops.sort((a, b) => a.distance - b.distance);
 
-            // Construct the final route: Start Point + 5 closest stops.
             tourRoute = [startPoint, ...potentialStops.slice(0, 5)]; 
-            currentTourStep = 0; // Reset to 0 (Ready to start)
+            currentTourStep = 0;
+            currentManeuverIndex = -1;
             
-            // --- Draw initial Straight Line Path (Pre-Navigation) ---
+            // Draw initial Straight Line Path (Pre-Navigation)
             if (tourPath) map.removeLayer(tourPath);
             const straightLineCoords = tourRoute.map(p => L.latLng(p.lat, p.lon));
             tourPath = L.polyline(straightLineCoords, {
-                color: '#84cc16', // Lighter green for the conceptual line
+                color: '#84cc16', 
                 weight: 3, 
                 opacity: 0.5,
-                dashArray: '10, 10' // Dashed line to show it's approximate
+                dashArray: '10, 10' 
             }).addTo(map);
 
-            // Open Navigation Panel and hide config
             document.getElementById('navigationPanel').classList.remove('translate-y-full', 'opacity-0');
             document.getElementById('tourPanel').classList.add('hidden');
             
             updateNavigationPanel();
             map.fitBounds(tourPath.getBounds(), {padding: [50, 50]});
-            console.log("Tour successfully created with", tourRoute.length - 1, "stops.");
         }
+
 
         /**
          * Fetches the detailed walking route to the current destination and updates the map.
@@ -599,7 +531,6 @@
         const initiateRoute = async () => {
             if (currentTourStep <= 0 || currentTourStep >= tourRoute.length) return;
 
-            const startPoint = tourRoute[currentTourStep - 1]; // Previous stop (or start)
             const endPoint = tourRoute[currentTourStep]; // Target
             
             const userLatLong = userMarker ? userMarker.getLatLng() : map.getCenter();
@@ -616,9 +547,13 @@
             if (tourPath) map.removeLayer(tourPath);
 
             if (routeData) {
+                // Store the steps in the target object
+                tourRoute[currentTourStep].steps = routeData.steps;
+                currentManeuverIndex = 0; // Reset maneuver tracking
+                
                 // Draw the detailed OSRM route
                 tourPath = L.polyline(routeData.path, {
-                    color: '#16a34a', // Darker solid green for active navigation
+                    color: '#16a34a', 
                     weight: 6, 
                     opacity: 0.9,
                     lineJoin: 'round'
@@ -628,21 +563,26 @@
                 const distanceKm = (routeData.distance / 1000).toFixed(2);
                 const durationMinutes = Math.ceil(routeData.duration / 60);
 
-                document.getElementById('nextLandmarkInfo').innerHTML = `
-                    Walk ${distanceKm} km (approx. ${durationMinutes} min). <br> 
-                    Destination: <span class="font-bold">${endPoint.title}</span>.
-                `;
+                // Update the instruction with overall segment data
+                let nextText = `Walk ${distanceKm} km (approx. ${durationMinutes} min). <br>`;
+                if (endPoint.isWiki) {
+                    nextText += `Destination: <span class="font-bold">${endPoint.title}</span>. <a href="${endPoint.url}" target="_blank" class="text-white underline hover:text-green-200">(Wiki Info)</a>`;
+                } else {
+                    nextText += `Destination: <span class="font-bold">${endPoint.title}</span>.`;
+                }
+                
+                document.getElementById('nextLandmarkInfo').innerHTML = nextText;
 
-                // Fit map to show the user, the target, and the route
-                map.fitBounds(tourPath.getBounds(), {padding: [50, 50]});
+                // Set high zoom level for GPS mode
+                map.setView(userLatLong, 18, {animate: true, duration: 1.5});
             } else {
-                // If routing fails, draw a simple line for guidance
+                // Fallback: draw a simple line
                 const simplePath = [
                     L.latLng(currentStart.lat, currentStart.lon),
                     L.latLng(endPoint.lat, endPoint.lon)
                 ];
                 tourPath = L.polyline(simplePath, {
-                    color: '#f87171', // Red for fallback/error path
+                    color: '#f87171', 
                     weight: 4, 
                     opacity: 0.7
                 }).addTo(map);
@@ -651,12 +591,12 @@
                     Routing failed, follow the straight line to: 
                     <span class="font-bold">${endPoint.title}</span>.
                 `;
+                 map.setView(userLatLong, 18, {animate: true, duration: 1.5});
             }
 
             document.getElementById('navActionButton').textContent = "Next Stop";
-            document.getElementById('navActionButton').disabled = true; // Wait for arrival
+            document.getElementById('navActionButton').disabled = true; 
         }
-
 
         const updateNavigationPanel = () => {
             if (!tourRoute || tourRoute.length <= 1) return;
@@ -665,7 +605,7 @@
             document.getElementById('navStepCounter').textContent = `${currentTourStep}/${totalStops}`;
 
             if (currentTourStep === 0) {
-                // Step 0: Pre-Navigation State
+                // Pre-Navigation State
                 const nextStop = tourRoute[1];
                 document.getElementById('currentNavInstruction').textContent = "Tour Ready: Conceptual Route";
                 document.getElementById('nextLandmarkInfo').innerHTML = `The dashed line shows the approximate path. Press <span class="font-bold">'Start Navigation'</span> to get the walking route to: <span class="font-bold">${nextStop.title}</span>.`;
@@ -673,16 +613,17 @@
                 document.getElementById('navActionButton').disabled = false; 
                 
             } else if (currentTourStep < tourRoute.length) {
-                // Mid-tour steps (currentTourStep is the index of the landmark we are tracking towards)
+                // Mid-tour steps - Trigger detailed route fetch
                 const target = tourRoute[currentTourStep];
-                
                 document.getElementById('currentNavInstruction').textContent = `Navigating to Stop ${currentTourStep}/${totalStops}: ${target.title}`;
                 
-                // Initiate the detailed route calculation
-                initiateRoute();
+                // Only initiate route if steps haven't been loaded yet for this segment
+                if (!target.steps) {
+                    initiateRoute();
+                }
                 
             } else {
-                // Tour finished (currentTourStep === tourRoute.length)
+                // Tour finished
                 document.getElementById('currentNavInstruction').textContent = "Tour Completed!";
                 document.getElementById('nextLandmarkInfo').textContent = "You've visited all designated historic points!";
                 document.getElementById('navActionButton').textContent = "End Tour";
@@ -694,50 +635,81 @@
              if (currentTourStep < tourRoute.length - 1) {
                 // Advance to the next landmark
                 currentTourStep++;
-                // The updateNavigationPanel call will handle the route fetching
+                // Reset maneuver index for the new segment
+                currentManeuverIndex = 0; 
                 updateNavigationPanel();
             } else if (currentTourStep === 0) {
                  // Initial click on "Start Navigation"
                  currentTourStep = 1;
-                 updateNavigationPanel();
+                 updateNavigationPanel(); // This triggers initiateRoute()
             }
              else if (currentTourStep === tourRoute.length - 1) {
                 // End Tour logic
                 if (tourPath) map.removeLayer(tourPath);
                 tourRoute = null;
                 currentTourStep = 0;
+                currentManeuverIndex = -1;
                 document.getElementById('navigationPanel').classList.add('translate-y-full', 'opacity-0');
                 showMessage("Tour Ended", "Thank you for exploring! Start a new tour anytime.");
             }
         }
 
         const checkTourProgress = (userLatLong) => {
-            // We only track distance if we are actively navigating (currentTourStep >= 1)
-            if (!tourRoute || currentTourStep < 1 || currentTourStep >= tourRoute.length) return;
+            // Only perform GPS checks if we are actively navigating to a landmark
+            if (!tourRoute || currentTourStep < 1 || currentTourStep >= tourRoute.length || !tourRoute[currentTourStep].steps) {
+                 if (currentTourStep > 0 && userMarker) {
+                    // Pan map to keep user in center during navigation
+                    map.panTo(userMarker.getLatLng(), {animate: true, duration: 1.0});
+                 }
+                 return;
+            }
 
             const target = tourRoute[currentTourStep];
             const userLat = userLatLong[0];
             const userLon = userLatLong[1];
-
-            const distanceToTarget = getDistance(userLat, userLon, target.lat, target.lon);
+            
+            const distanceToDestination = getDistance(userLat, userLon, target.lat, target.lon);
             const arrivalThreshold = 50; // 50 meters
 
-            if (distanceToTarget < arrivalThreshold) {
+            // --- 1. Check for Destination Arrival ---
+            if (distanceToDestination < arrivalThreshold) {
                 document.getElementById('navActionButton').disabled = false;
-                document.getElementById('currentNavInstruction').textContent = `ARRIVED: ${target.title}`;
-                document.getElementById('nextLandmarkInfo').textContent = `You have arrived at this location. Press 'Next Stop' to continue the tour.`;
-            } else {
-                const distanceKm = (distanceToTarget / 1000).toFixed(2);
-                document.getElementById('navActionButton').disabled = true;
-                
-                // If we have an active detailed route, don't update this text unless we arrived.
-                // We keep the routing time/distance info provided by initiateRoute
-                if (tourPath && tourPath.options.weight === 6) {
-                    // Route is actively being drawn, do nothing to the info panel text
-                } else {
-                    document.getElementById('nextLandmarkInfo').textContent = `Distance to ${target.title}: ${distanceKm} km.`;
-                }
+                document.getElementById('currentNavInstruction').innerHTML = `<span class="text-yellow-200 font-bold">ARRIVED:</span> ${target.title}`;
+                document.getElementById('nextLandmarkInfo').textContent = `You have reached this location. Press 'Next Stop' to continue the tour.`;
+                return;
             }
+            
+            // --- 2. Get Next Maneuver Instruction ---
+            const maneuverResult = findNextManeuver(userLat, userLon, target.steps);
+            
+            // Update the Panel with GPS Instructions
+            if (!maneuverResult.finished) {
+                const distanceMeters = maneuverResult.distance.toFixed(0);
+                
+                document.getElementById('currentNavInstruction').innerHTML = `
+                    <span class="font-bold">${maneuverResult.instruction}</span>
+                `;
+                
+                document.getElementById('nextLandmarkInfo').innerHTML = `
+                    Distance to turn: <span class="font-bold">${distanceMeters} meters</span>.
+                    <br>
+                    Heading to <span class="font-bold">${target.title}</span>.
+                `;
+
+                // If the user has progressed past the last known maneuver, update the index.
+                if (maneuverResult.index > currentManeuverIndex) {
+                    currentManeuverIndex = maneuverResult.index;
+                }
+            } else {
+                // Final stretch before arrival
+                const distanceMeters = distanceToDestination.toFixed(0);
+                document.getElementById('currentNavInstruction').innerHTML = `Final Stretch: Proceed to ${target.title}`;
+                document.getElementById('nextLandmarkInfo').textContent = `Distance remaining: ${distanceMeters} meters.`;
+            }
+
+            // --- 3. Keep User Centered and Zoomed ---
+            map.panTo(userMarker.getLatLng(), {animate: true, duration: 1.0});
+            if (map.getZoom() < 18) map.setZoom(18);
         }
 
         document.addEventListener('DOMContentLoaded', initMap);
