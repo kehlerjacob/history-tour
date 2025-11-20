@@ -1,14 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Historic Landmark Map with Real-Time GeoSearch and Navigation</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 
@@ -17,22 +18,26 @@
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-        
+
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f7f9fc;
         }
+
         .leaflet-container {
             font-family: 'Inter', sans-serif;
         }
+
         .leaflet-default-icon-path {
             /* Standard marker path, kept for fallback */
             background-image: url('https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png');
         }
+
         input[type=range] {
-            -webkit-appearance: none; 
-            background: transparent; 
+            -webkit-appearance: none;
+            background: transparent;
         }
+
         input[type=range]::-webkit-slider-thumb {
             -webkit-appearance: none;
             height: 16px;
@@ -40,14 +45,15 @@
             border-radius: 50%;
             background: #ffffff;
             cursor: pointer;
-            margin-top: -6px; 
-            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            margin-top: -6px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
         }
+
         input[type=range]::-webkit-slider-runnable-track {
             width: 100%;
             height: 4px;
             cursor: pointer;
-            background: #a5b4fc; 
+            background: #a5b4fc;
             border-radius: 2px;
         }
 
@@ -60,27 +66,31 @@
             height: 40px !important;
             margin-left: -20px !important;
             margin-top: -20px !important;
-            position: relative; /* Needed for absolute positioning of the triangle */
-            transition: transform 0.3s ease-out; /* Smooth marker transition */
+            position: relative;
+            /* Needed for absolute positioning of the triangle */
+            transition: transform 0.3s ease-out;
+            /* Smooth marker transition */
         }
-        
+
         /* The Rotating White Triangle Indicator */
         #userDirectionArrow {
             position: absolute;
             /* Pivot point: slightly below the geometric center to place the tip visually correct */
-            transform-origin: 50% 75%; 
-            
+            transform-origin: 50% 75%;
+
             /* Create the triangle shape using CSS borders */
             width: 0;
             height: 0;
             border-style: solid;
-            border-width: 0 6px 14px 6px; /* 14px height, 12px base width */
-            border-color: transparent transparent #ffffff transparent; /* White tip pointing up */
-            
+            border-width: 0 6px 14px 6px;
+            /* 14px height, 12px base width */
+            border-color: transparent transparent #ffffff transparent;
+            /* White tip pointing up */
+
             /* Adjust position to center the pivot point */
-            margin-top: -10px; 
+            margin-top: -10px;
             /* REDUCED TRANSITION TIME FOR SMOOTH COMPASS MOVEMENT */
-            transition: transform 0.05s linear; 
+            transition: transform 0.05s linear;
         }
 
         /* Message Box for custom alerts */
@@ -94,11 +104,12 @@
             transition: opacity 0.3s ease;
             pointer-events: none;
         }
+
         #messageBox.visible {
             opacity: 1;
             pointer-events: auto;
         }
-        
+
         /* HIDE LEAFLET ZOOM CONTROLS FOR A CLEANER UI */
         .leaflet-control-zoom {
             display: none !important;
@@ -112,23 +123,24 @@
             margin-right: 0.5rem;
             vertical-align: middle;
         }
-
     </style>
 </head>
+
 <body class="flex flex-col h-screen overflow-hidden">
 
     <!-- Message Box (Custom Alert) -->
     <div id="messageBox" class="p-6 bg-white rounded-xl shadow-2xl max-w-sm w-full">
         <h3 id="messageTitle" class="text-lg font-bold mb-2 text-gray-800">Alert</h3>
         <p id="messageText" class="text-sm text-gray-600 mb-4">Content</p>
-        <button onclick="document.getElementById('messageBox').classList.remove('visible')" class="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700">
+        <button onclick="document.getElementById('messageBox').classList.remove('visible')"
+            class="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700">
             OK
         </button>
     </div>
 
     <!-- Header (Compacted) -->
     <header class="bg-indigo-600 shadow-xl z-[4000] p-3 flex flex-col gap-3 flex-none relative">
-        
+
         <!-- Title and Controls Row 1 -->
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
@@ -138,28 +150,44 @@
 
             <!-- Controls Group Row 1 -->
             <div class="flex flex-wrap items-center justify-center gap-3">
-                 
-                 <!-- Location Dropdown -->
-                 <div class="relative">
-                    <button onclick="document.getElementById('locationDropdown').classList.toggle('hidden')" class="bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-bold py-2 px-3 rounded-lg shadow transition flex items-center gap-1">
+
+                <!-- Location Dropdown -->
+                <div class="relative">
+                    <button onclick="document.getElementById('locationDropdown').classList.toggle('hidden')"
+                        class="bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-bold py-2 px-3 rounded-lg shadow transition flex items-center gap-1">
                         <span>Location</span>
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7">
+                            </path>
+                        </svg>
                     </button>
                     <!-- Dropdown Menu -->
-                    <div id="locationDropdown" class="hidden absolute top-full right-0 mt-2 w-48 bg-white rounded-lg shadow-xl py-2 z-50 border border-gray-100">
-                        <button onclick="changeLocation(38.8893, -77.0502, 'Washington D.C.'); document.getElementById('locationDropdown').classList.add('hidden')" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50">Washington D.C.</button>
-                        <button onclick="changeLocation(40.7580, -73.9855, 'Midtown Manhattan'); document.getElementById('locationDropdown').classList.add('hidden')" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50">Midtown Manhattan</button>
-                        <button onclick="changeLocation(51.5074, 0.1278, 'London'); document.getElementById('locationDropdown').classList.add('hidden')" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50">London, UK</button>
+                    <div id="locationDropdown"
+                        class="hidden absolute top-full right-0 mt-2 w-48 bg-white rounded-lg shadow-xl py-2 z-50 border border-gray-100">
+                        <button
+                            onclick="changeLocation(38.8893, -77.0502, 'Washington D.C.'); document.getElementById('locationDropdown').classList.add('hidden')"
+                            class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50">Washington
+                            D.C.</button>
+                        <button
+                            onclick="changeLocation(40.7580, -73.9855, 'Midtown Manhattan'); document.getElementById('locationDropdown').classList.add('hidden')"
+                            class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50">Midtown
+                            Manhattan</button>
+                        <button
+                            onclick="changeLocation(51.5074, 0.1278, 'London'); document.getElementById('locationDropdown').classList.add('hidden')"
+                            class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50">London,
+                            UK</button>
                     </div>
-                 </div>
-                 
+                </div>
+
                 <!-- Enable Compass Button (FALLBACK ONLY - Hidden initially) -->
-                 <button id="enableCompassBtn" onclick="handleCompassPermissionRequest()" class="bg-yellow-500 hover:bg-yellow-600 text-gray-900 text-xs font-bold py-2 px-3 rounded-lg shadow transition whitespace-nowrap hidden">
+                <button id="enableCompassBtn" onclick="handleCompassPermissionRequest()"
+                    class="bg-yellow-500 hover:bg-yellow-600 text-gray-900 text-xs font-bold py-2 px-3 rounded-lg shadow transition whitespace-nowrap hidden">
                     Enable Compass
                 </button>
 
                 <!-- Tour Button -->
-                <button id="startTourButton" onclick="openTourPanel()" class="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold py-2 px-3 rounded-lg shadow transition whitespace-nowrap">
+                <button id="startTourButton" onclick="openTourPanel()"
+                    class="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold py-2 px-3 rounded-lg shadow transition whitespace-nowrap">
                     Start Tour
                 </button>
             </div>
@@ -167,13 +195,14 @@
 
         <!-- Filter Row 2 (Full Width) -->
         <div class="flex items-center gap-3 w-full max-w-4xl mx-auto">
-            
-             <!-- Category Filter Input -->
+
+            <!-- Category Filter Input -->
             <div class="flex-grow bg-indigo-700 rounded-lg p-2 flex items-center gap-2 w-full">
-                <label for="categoryFilter" class="text-white text-xs font-medium whitespace-nowrap hidden sm:block">Filter by Keyword:</label>
-                <input type="text" id="categoryFilter" placeholder="e.g., house, museum, park (5km Search Radius)" 
-                       onchange="fetchAndPinLandmarks()"
-                       class="w-full p-1 bg-indigo-800 text-white placeholder-indigo-300 text-xs rounded-md focus:ring-indigo-300 focus:border-indigo-300">
+                <label for="categoryFilter"
+                    class="text-white text-xs font-medium whitespace-nowrap hidden sm:block">Filter by Keyword:</label>
+                <input type="text" id="categoryFilter" placeholder="e.g., house, museum, park (5km Search Radius)"
+                    onchange="fetchAndPinLandmarks()"
+                    class="w-full p-1 bg-indigo-800 text-white placeholder-indigo-300 text-xs rounded-md focus:ring-indigo-300 focus:border-indigo-300">
             </div>
         </div>
     </header>
@@ -183,48 +212,65 @@
     <div id="tourPanel" class="hidden absolute top-[13rem] right-4 bg-white p-4 rounded-xl shadow-2xl z-[4900] w-72">
         <h3 class="font-bold text-lg text-indigo-700 mb-3 flex justify-between items-center">
             Configure Tour
-            <button onclick="document.getElementById('tourPanel').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            <button onclick="document.getElementById('tourPanel').classList.add('hidden')"
+                class="text-gray-400 hover:text-gray-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                    </path>
+                </svg>
             </button>
         </h3>
-        <label for="tourDistance" class="block text-sm font-medium text-gray-700 mb-1">Max Tour Distance (Miles):</label>
+        <label for="tourDistance" class="block text-sm font-medium text-gray-700 mb-1">Max Tour Distance
+            (Miles):</label>
         <div class="flex gap-2">
-            <input type="number" id="tourDistance" min="1" max="15" value="5" step="0.5" class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5">
-            <button onclick="createTour(true)" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition flex-shrink-0" id="tourConfigBtn">
+            <input type="number" id="tourDistance" min="1" max="15" value="5" step="0.5"
+                class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5">
+            <button onclick="createTour(true)"
+                class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition flex-shrink-0"
+                id="tourConfigBtn">
                 Create
             </button>
         </div>
         <p id="tourStatus" class="text-xs mt-2 text-gray-500">Finds closest pins and optimizes for distance.</p>
     </div>
-    
+
     <!-- Map Container -->
     <div id="map" class="flex-1 w-full bg-gray-200"></div>
 
     <!-- Location Status Bubble (REPOSITIONED & Compacted) -->
-    <div id="locationStatus" class="fixed top-[9rem] sm:top-[6rem] left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-xl z-[3500] flex items-center justify-center gap-3 transition-opacity duration-500 opacity-0 pointer-events-none w-11/12 max-w-3xl border border-gray-200">
+    <div id="locationStatus"
+        class="fixed top-[9rem] sm:top-[6rem] left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-xl z-[3500] flex items-center justify-center gap-3 transition-opacity duration-500 opacity-0 pointer-events-none w-11/12 max-w-3xl border border-gray-200">
         <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse flex-shrink-0"></div>
-        <span class="text-sm font-medium text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis" id="locationStatusText">Locating...</span>
+        <span class="text-sm font-medium text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis"
+            id="locationStatusText">Locating...</span>
     </div>
 
     <!-- NAVIGATION PANEL (Green Bar - Fixed to Bottom) -->
-    <div id="navigationPanel" class="fixed inset-x-0 bottom-0 bg-green-600 text-white p-4 sm:p-6 shadow-2xl rounded-t-3xl transition-all duration-300 transform translate-y-full opacity-0 z-[5000] h-48 sm:h-auto">
+    <div id="navigationPanel"
+        class="fixed inset-x-0 bottom-0 bg-green-600 text-white p-4 sm:p-6 shadow-2xl rounded-t-3xl transition-all duration-300 transform translate-y-full opacity-0 z-[5000] h-48 sm:h-auto">
         <div class="max-w-xl mx-auto flex flex-col h-full">
 
             <!-- Current Step Display -->
             <div class="flex items-start space-x-3 mb-2">
-                <svg id="navInstructionIcon" class="w-6 h-6 flex-shrink-0 mt-1" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.41-7-7.38 0-.47.05-.93.14-1.39l5.86 5.86v2.91zm5.93-5.07l-5.86-5.86c.46-.09.92-.14 1.39-.14 3.97 0 6.89 3.05 7.38 7zm-5.93-10.79l5.86 5.86c-.46.09-.92-.14-1.39-.14-3.97 0-6.89-3.05-7.38-7zm-5.93 5.07l5.86 5.86c-.46.09-.92-.14-1.39-.14-3.97 0-6.89-3.05-7.38-7z"/></svg>
-                <h2 id="currentNavInstruction" class="text-xl sm:text-2xl font-semibold leading-tight">Waiting for Tour...</h2>
+                <svg id="navInstructionIcon" class="w-6 h-6 flex-shrink-0 mt-1" fill="currentColor" viewBox="0 0 24 24">
+                    <path
+                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.41-7-7.38 0-.47.05-.93.14-1.39l5.86 5.86v2.91zm5.93-5.07l-5.86-5.86c.46-.09.92-.14 1.39-.14 3.97 0 6.89 3.05 7.38 7zm-5.93-10.79l5.86 5.86c-.46.09-.92-.14-1.39-.14-3.97 0-6.89-3.05-7.38-7zm-5.93 5.07l5.86 5.86c-.46.09-.92-.14-1.39-.14-3.97 0-6.89-3.05-7.38-7z" />
+                </svg>
+                <h2 id="currentNavInstruction" class="text-xl sm:text-2xl font-semibold leading-tight">Waiting for
+                    Tour...</h2>
             </div>
-            
+
             <!-- Next Steps & Progress -->
             <div class="flex justify-between items-end mt-1 mb-4 border-t border-green-500 pt-3">
-                <p id="nextLandmarkInfo" class="text-sm opacity-90 leading-relaxed max-w-[70%]">Next: Please start a tour using the button above.</p>
+                <p id="nextLandmarkInfo" class="text-sm opacity-90 leading-relaxed max-w-[70%]">Next: Please start a
+                    tour using the button above.</p>
                 <p id="navStepCounter" class="text-sm font-medium opacity-80 flex-shrink-0 ml-4">0/0</p>
             </div>
 
             <!-- Action Button -->
             <div class="flex-grow flex items-end">
-                <button id="navActionButton" onclick="nextSegment()" class="w-full bg-white text-green-600 font-bold py-3 px-6 rounded-xl hover:bg-gray-100 transition duration-200 shadow-lg">
+                <button id="navActionButton" onclick="nextSegment()"
+                    class="w-full bg-white text-green-600 font-bold py-3 px-6 rounded-xl hover:bg-gray-100 transition duration-200 shadow-lg">
                     Next Stop
                 </button>
             </div>
@@ -242,16 +288,16 @@
         let tourPoints = []; // Populated by GeoSearch
         const WIKIPEDIA_API_URL = 'https://en.wikipedia.org/w/api.php';
         // Using OSRM Public Server for routing
-        const OSRM_API_URL = 'https://router.project-osrm.org/route/v1/foot/'; 
+        const OSRM_API_URL = 'https://router.project-osrm.org/route/v1/foot/';
         let isFetching = false; // Prevent multiple concurrent fetches
-        
+
         let currentTourStep = 0; // 0 = ready to start, 1+ = navigating to this stop index
         let watchingPosition = false;
         let watchId = null;
         let currentManeuverIndex = -1; // Index of the next maneuver in the OSRM steps array
 
         // NEW: State for compass permission AND the live heading data
-        let isCompassPermissionRequested = false; 
+        let isCompassPermissionRequested = false;
         let currentSensorHeading = null; // Stores live heading from deviceorientation sensor
 
         // CONSTANT: Fixed search radius in kilometers (5 miles is approx 8.04672 km, sticking to 5km for precision)
@@ -302,15 +348,15 @@
         // Utility: Haversine distance calculation in meters
         const getDistance = (lat1, lon1, lat2, lon2) => {
             const R = 6371e3; // metres
-            const φ1 = lat1 * Math.PI/180; 
-            const φ2 = lat2 * Math.PI/180;
-            const Δφ = (lat2-lat1) * Math.PI/180;
-            const Δλ = (lon2-lon1) * Math.PI/180;
+            const φ1 = lat1 * Math.PI / 180;
+            const φ2 = lat2 * Math.PI / 180;
+            const Δφ = (lat2 - lat1) * Math.PI / 180;
+            const Δλ = (lon2 - lon1) * Math.PI / 180;
 
-            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                      Math.cos(φ1) * Math.cos(φ2) *
-                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
             return R * c; // Distance in meters
         }
@@ -325,16 +371,16 @@
             if (degrees === null || typeof degrees === 'undefined' || isNaN(degrees)) {
                 return 'N/A';
             }
-            
+
             // Normalize degrees to 0-360
-            degrees = (degrees % 360 + 360) % 360; 
+            degrees = (degrees % 360 + 360) % 360;
 
             const directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
             // Each direction covers 360 / 16 = 22.5 degrees.
             // Half a sector is 22.5 / 2 = 11.25 degrees.
             // We shift the heading by half a sector and divide by the sector size.
             const index = Math.floor((degrees + 11.25) / 22.5);
-            
+
             return directions[index % 16];
         }
         // --- END UTILITY FUNCTION ---
@@ -354,13 +400,13 @@
             // 1. Check for webkitCompassHeading (best accuracy on iOS Safari)
             if (event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
                 magneticHeading = event.webkitCompassHeading;
-            } 
+            }
             // 2. Fallback to standard alpha (needs adjustment based on screen orientation)
             else if (event.alpha !== undefined && event.alpha !== null) {
                 let alpha = event.alpha;
-                
+
                 // Calculate magnetic heading (360 - alpha) and normalize
-                magneticHeading = (360 - alpha + 360) % 360; 
+                magneticHeading = (360 - alpha + 360) % 360;
             }
 
             if (magneticHeading !== null) {
@@ -369,12 +415,12 @@
                 // Apply rotation to the arrow
                 const pointerRotation = magneticHeading;
                 const cardinal = getCardinalDirection(magneticHeading);
-                
+
                 arrow.style.transform = `rotate(${pointerRotation}deg)`;
-                
+
                 // --- MODIFICATION: Simplified status text to only show heading ---
                 const headingText = `${cardinal} (${magneticHeading.toFixed(1)}°) (Compass)`;
-                
+
                 if (locationStatusText) {
                     // Update the status text with the current heading only
                     locationStatusText.innerHTML = `<span class="text-indigo-600 font-bold">${headingText}</span>`;
@@ -382,7 +428,7 @@
                 // --- END MODIFICATION ---
             }
         }
-        
+
         // --- UPDATED: COMPASS PERMISSION LOGIC ---
 
         /**
@@ -403,7 +449,7 @@
                         } else {
                             // DENIED: Show the button as a fallback/retry option
                             isCompassPermissionRequested = false;
-                            btn.classList.remove('hidden'); 
+                            btn.classList.remove('hidden');
                             showMessage("Compass Access Needed", "Heading data was denied. Click 'Enable Compass' to try again.");
                         }
                     })
@@ -440,10 +486,10 @@
                 if (data.routes && data.routes.length > 0) {
                     const route = data.routes[0];
                     const leg = route.legs[0];
-                    
+
                     const polylineString = route.geometry;
-                    const decodedPath = polyline.decode(polylineString); 
-                    
+                    const decodedPath = polyline.decode(polylineString);
+
                     return {
                         path: decodedPath,
                         distance: route.distance,
@@ -477,34 +523,34 @@
             for (let i = 0; i < targetSteps.length; i++) {
                 const step = targetSteps[i];
                 // Step location is [lon, lat]
-                const stepLon = step.maneuver.location[0]; 
+                const stepLon = step.maneuver.location[0];
                 const stepLat = step.maneuver.location[1];
-                
+
                 const distanceToStep = getDistance(userLat, userLon, stepLat, stepLon);
 
                 // If the user is close enough (e.g., within 20m) and we haven't checked this one, 
                 // we treat the next one as the current target.
                 if (distanceToStep > 20) {
-                     // Since we iterate sequentially, the first step we find that is > 20m away 
-                     // from the maneuver point is the 'next' one to aim for.
-                     if (distanceToStep < minDistance) {
+                    // Since we iterate sequentially, the first step we find that is > 20m away 
+                    // from the maneuver point is the 'next' one to aim for.
+                    if (distanceToStep < minDistance) {
                         minDistance = distanceToStep;
                         bestStep = step;
                         maneuverIndex = i;
                         break; // Found the target maneuver
-                     }
+                    }
                 }
             }
-            
+
             // Handle arrival (last step)
             if (maneuverIndex === -1 || maneuverIndex === targetSteps.length - 1) {
-                 return { instruction: "Arriving at your destination!", distance: getDistance(userLat, userLon, tourRoute[currentTourStep].lat, tourRoute[currentTourStep].lon), finished: true, index: targetSteps.length - 1 };
+                return { instruction: "Arriving at your destination!", distance: getDistance(userLat, userLon, tourRoute[currentTourStep].lat, tourRoute[currentTourStep].lon), finished: true, index: targetSteps.length - 1 };
             }
 
             // Return the instruction and the distance to the maneuver location
-            return { 
-                instruction: bestStep.maneuver.instruction, 
-                distance: minDistance, 
+            return {
+                instruction: bestStep.maneuver.instruction,
+                distance: minDistance,
                 finished: false,
                 index: maneuverIndex
             };
@@ -514,10 +560,10 @@
         // --- MAP & GEO LOCATION LOGIC (Updated watchPositionSuccess) ---
 
         const initMap = () => {
-             // CRITICAL FIX: Wrap initialization in try/catch and call invalidateSize()
+            // CRITICAL FIX: Wrap initialization in try/catch and call invalidateSize()
             try {
                 map = L.map('map', { zoomControl: false }).setView([38.8893, -77.0502], 13);
-                
+
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
                     subdomains: 'abcd',
@@ -527,7 +573,7 @@
                 // This is a common fix for Leaflet maps inside flex containers that fail to render tiles
                 setTimeout(() => {
                     map.invalidateSize();
-                }, 100); 
+                }, 100);
 
                 landmarkMarkers.addTo(map);
                 L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -543,30 +589,30 @@
         };
 
         const changeLocation = (lat, lng, name) => {
-             map.setView([lat, lng], 13);
-             showMessage("Location Changed", `Map centered on ${name}. Loading local historic places...`);
+            map.setView([lat, lng], 13);
+            showMessage("Location Changed", `Map centered on ${name}. Loading local historic places...`);
         };
-        
+
         /**
          * Initializes geolocation: checks for compass permission needs, gets initial fix, then starts continuous watch.
          */
         const startWatchingPosition = () => {
             if (watchingPosition) return;
-            
+
             const locationStatus = document.getElementById('locationStatus');
             const locationStatusText = document.getElementById('locationStatusText');
-            
+
             // 1. Check for Compass Permission Requirement (iOS) and request immediately
             if (typeof DeviceOrientationEvent.requestPermission === 'function') {
                 // Call the permission handler immediately on load
-                handleCompassPermissionRequest(); 
+                handleCompassPermissionRequest();
             } else {
-                 // For other browsers, assume implicit permission is available
-                 if (window.DeviceOrientationEvent) {
+                // For other browsers, assume implicit permission is available
+                if (window.DeviceOrientationEvent) {
                     window.addEventListener('deviceorientation', handleCompassUpdate);
                     isCompassPermissionRequested = true;
-                 }
-                 document.getElementById('enableCompassBtn').classList.add('hidden');
+                }
+                document.getElementById('enableCompassBtn').classList.add('hidden');
             }
 
 
@@ -574,32 +620,32 @@
                 // Show status bubble immediately
                 locationStatus.classList.add('opacity-100', 'pointer-events-auto');
                 locationStatusText.textContent = "Requesting initial GPS location...";
-                
+
                 // 2. Get quick initial fix (faster startup)
                 navigator.geolocation.getCurrentPosition(
                     (position) => {
                         // Use the success handler logic from watchPositionSuccess to initialize the marker and center the map right away.
-                        watchPositionSuccess(position); 
+                        watchPositionSuccess(position);
                         locationStatusText.textContent = "Initial location acquired. Starting continuous tracking...";
-                        
+
                         // 3. Start continuous watch AFTER initial fix
                         watchingPosition = true;
                         // Use high accuracy and low timeout for better real-time heading/position
                         watchId = navigator.geolocation.watchPosition(
-                            watchPositionSuccess, 
-                            watchPositionError, 
+                            watchPositionSuccess,
+                            watchPositionError,
                             { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
                         );
                     },
                     (error) => {
                         // If initial fix fails (e.g., permission denied, timeout), display error
-                        watchPositionError(error); 
-                        
+                        watchPositionError(error);
+
                         // 4. Still start continuous watch, in case the error was temporary or a timeout
                         watchingPosition = true;
                         watchId = navigator.geolocation.watchPosition(
-                            watchPositionSuccess, 
-                            watchPositionError, 
+                            watchPositionSuccess,
+                            watchPositionError,
                             { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
                         );
                     },
@@ -630,46 +676,46 @@
                 userMarker.setLatLng(newLatLong);
                 // In navigation mode, pan the map to keep the user centered
                 if (currentTourStep > 0 && currentTourStep < tourRoute.length) {
-                    map.panTo(newLatLong, {animate: true, duration: 1.0});
+                    map.panTo(newLatLong, { animate: true, duration: 1.0 });
                 }
             }
 
             // Determine what heading to display in the status bar (Compass takes priority)
             let displayHeading = null;
             let headingSource = "GPS";
-            
+
             if (currentSensorHeading !== null) {
                 displayHeading = currentSensorHeading;
                 headingSource = "Compass";
-            } 
+            }
             else if (position.coords.heading !== null && !isNaN(position.coords.heading)) {
                 displayHeading = position.coords.heading;
                 headingSource = "GPS";
             }
-            
+
             // --- MODIFICATION: Display only the heading and cardinal direction ---
             const cardinalDirection = getCardinalDirection(displayHeading);
 
-            const headingText = displayHeading !== null 
-                                ? `${cardinalDirection} (${displayHeading.toFixed(1)}°) (${headingSource})`
-                                : `N/A (${cardinalDirection}) (No sensor data)`;
-            
+            const headingText = displayHeading !== null
+                ? `${cardinalDirection} (${displayHeading.toFixed(1)}°) (${headingSource})`
+                : `N/A (${cardinalDirection}) (No sensor data)`;
+
             // Update Status Bubble - ONLY HEADING
             document.getElementById('locationStatusText').innerHTML = `
                 <span class="text-indigo-600 font-bold">${headingText}</span>
             `;
             // --- END MODIFICATION ---
-            
+
             // Handle tour progression and instruction updates
             checkTourProgress(newLatLong);
         };
 
         const watchPositionError = (error) => {
             console.error('Geolocation error:', error);
-            
+
             let message = "Geolocation Error. Check permissions.";
             if (error.code === error.PERMISSION_DENIED) {
-                 message = "Permission denied. Location marker may not appear.";
+                message = "Permission denied. Location marker may not appear.";
             }
 
             document.getElementById('locationStatusText').textContent = message;
@@ -687,26 +733,26 @@
             if (isFetching) return;
             isFetching = true;
             landmarkMarkers.clearLayers();
-            tourPoints = []; 
+            tourPoints = [];
 
             // Use the fixed radius (5km) for the API call
-            const radiusMeters = FIXED_SEARCH_RADIUS_KM * 1000; 
+            const radiusMeters = FIXED_SEARCH_RADIUS_KM * 1000;
 
             let url = `${WIKIPEDIA_API_URL}?action=query&list=geosearch&gsradius=${radiusMeters}&gscoord=${lat}|${lon}&gslimit=50&format=json&origin=*`;
-            
+
             try {
                 const data = await fetchWithRetry(url);
                 const pages = data.query?.geosearch || [];
-                
+
                 // Optional keyword filtering (applied client-side)
-                const filteredPages = keyword 
+                const filteredPages = keyword
                     ? pages.filter(p => p.title.toLowerCase().includes(keyword.toLowerCase()))
                     : pages;
 
                 filteredPages.forEach(p => {
                     pinLandmark(p.lat, p.lon, p.title, `https://en.wikipedia.org/?curid=${p.pageid}`);
                 });
-                
+
                 isFetching = false;
                 document.getElementById('tourStatus').textContent = `Found ${filteredPages.length} landmarks.`;
 
@@ -726,7 +772,7 @@
                 </div>
             `;
             marker.bindPopup(popupContent);
-            tourPoints.push({lat, lon, title, isWiki: true, url, marker});
+            tourPoints.push({ lat, lon, title, isWiki: true, url, marker });
         };
 
         const fetchAndPinLandmarks = () => {
@@ -737,10 +783,10 @@
         };
 
 
-        const createTour = (reset=false) => {
+        const createTour = (reset = false) => {
             const maxDistanceMiles = parseFloat(document.getElementById('tourDistance').value);
             const maxDistanceMeters = maxDistanceMiles * 1609.34;
-            
+
             if (tourPoints.length < 2) {
                 document.getElementById('tourStatus').textContent = 'Error: Not enough landmarks loaded.';
                 showMessage("Tour Failed: No Pins", `Only ${tourPoints.length} landmarks found on the map. Please ensure the map is centered over a major city.`);
@@ -748,10 +794,10 @@
             }
 
             const refLatLong = userMarker ? userMarker.getLatLng() : map.getCenter();
-            
+
             const startPoint = {
                 lat: refLatLong.lat,
-                lon: refLatLong.lng, 
+                lon: refLatLong.lng,
                 title: userMarker ? "Your Start Location" : "Map Center Start",
                 isWiki: false,
                 url: null
@@ -759,7 +805,7 @@
 
             let potentialStops = tourPoints.filter(p => {
                 const distance = getDistance(startPoint.lat, startPoint.lon, p.lat, p.lon);
-                return distance <= maxDistanceMeters; 
+                return distance <= maxDistanceMeters;
             }).map(p => ({
                 ...p,
                 distance: getDistance(startPoint.lat, startPoint.lon, p.lat, p.lon)
@@ -770,28 +816,28 @@
                 showMessage("Tour Failed: Pins Too Far", `Only ${potentialStops.length} landmarks found within ${maxDistanceMiles} miles of the starting point. Try increasing the Max Tour Distance in this panel.`);
                 return;
             }
-            
+
             potentialStops.sort((a, b) => a.distance - b.distance);
 
-            tourRoute = [startPoint, ...potentialStops.slice(0, 5)]; 
+            tourRoute = [startPoint, ...potentialStops.slice(0, 5)];
             currentTourStep = 0;
             currentManeuverIndex = -1;
-            
+
             // Draw initial Straight Line Path (Pre-Navigation)
             if (tourPath) map.removeLayer(tourPath);
             const straightLineCoords = tourRoute.map(p => L.latLng(p.lat, p.lon));
             tourPath = L.polyline(straightLineCoords, {
-                color: '#84cc16', 
-                weight: 3, 
+                color: '#84cc16',
+                weight: 3,
                 opacity: 0.5,
-                dashArray: '10, 10' 
+                dashArray: '10, 10'
             }).addTo(map);
 
             document.getElementById('navigationPanel').classList.remove('translate-y-full', 'opacity-0');
             document.getElementById('tourPanel').classList.add('hidden');
-            
+
             updateNavigationPanel();
-            map.fitBounds(tourPath.getBounds(), {padding: [50, 50]});
+            map.fitBounds(tourPath.getBounds(), { padding: [50, 50] });
         }
 
 
@@ -802,11 +848,11 @@
             if (currentTourStep <= 0 || currentTourStep >= tourRoute.length) return;
 
             const endPoint = tourRoute[currentTourStep]; // Target
-            
+
             const userLatLong = userMarker ? userMarker.getLatLng() : map.getCenter();
-            
+
             // Use current user location as the actual start of the segment
-            const currentStart = {lat: userLatLong.lat, lon: userLatLong.lng}; 
+            const currentStart = { lat: userLatLong.lat, lon: userLatLong.lng };
 
             document.getElementById('navActionButton').textContent = "Calculating Route...";
             document.getElementById('navActionButton').disabled = true;
@@ -820,15 +866,15 @@
                 // Store the steps in the target object
                 tourRoute[currentTourStep].steps = routeData.steps;
                 currentManeuverIndex = 0; // Reset maneuver tracking
-                
+
                 // Draw the detailed OSRM route
                 tourPath = L.polyline(routeData.path, {
-                    color: '#16a34a', 
-                    weight: 6, 
+                    color: '#16a34a',
+                    weight: 6,
                     opacity: 0.9,
                     lineJoin: 'round'
                 }).addTo(map);
-                
+
                 // Estimate time and distance
                 const distanceKm = (routeData.distance / 1000).toFixed(2);
                 const durationMinutes = Math.ceil(routeData.duration / 60);
@@ -840,11 +886,11 @@
                 } else {
                     nextText += `Destination: <span class="font-bold">${endPoint.title}</span>.`;
                 }
-                
+
                 document.getElementById('nextLandmarkInfo').innerHTML = nextText;
 
                 // Set high zoom level for GPS mode
-                map.setView(userLatLong, 18, {animate: true, duration: 1.5});
+                map.setView(userLatLong, 18, { animate: true, duration: 1.5 });
             } else {
                 // Fallback: draw a simple line
                 const simplePath = [
@@ -852,8 +898,8 @@
                     L.latLng(endPoint.lat, endPoint.lon)
                 ];
                 tourPath = L.polyline(simplePath, {
-                    color: '#f87171', 
-                    weight: 4, 
+                    color: '#f87171',
+                    weight: 4,
                     opacity: 0.7
                 }).addTo(map);
 
@@ -861,17 +907,17 @@
                     Routing failed, follow the straight line to: 
                     <span class="font-bold">${endPoint.title}</span>.
                 `;
-                 map.setView(userLatLong, 18, {animate: true, duration: 1.5});
+                map.setView(userLatLong, 18, { animate: true, duration: 1.5 });
             }
 
             document.getElementById('navActionButton').textContent = "Next Stop";
-            document.getElementById('navActionButton').disabled = true; 
+            document.getElementById('navActionButton').disabled = true;
         }
 
         const updateNavigationPanel = () => {
             if (!tourRoute || tourRoute.length <= 1) return;
-            
-            const totalStops = tourRoute.length - 1; 
+
+            const totalStops = tourRoute.length - 1;
             document.getElementById('navStepCounter').textContent = `${currentTourStep}/${totalStops}`;
 
             if (currentTourStep === 0) {
@@ -880,18 +926,18 @@
                 document.getElementById('currentNavInstruction').textContent = "Tour Ready: Conceptual Route";
                 document.getElementById('nextLandmarkInfo').innerHTML = `The dashed line shows the approximate path. Press <span class="font-bold">'Start Navigation'</span> to get the walking route to: <span class="font-bold">${nextStop.title}</span>.`;
                 document.getElementById('navActionButton').textContent = "Start Navigation";
-                document.getElementById('navActionButton').disabled = false; 
-                
+                document.getElementById('navActionButton').disabled = false;
+
             } else if (currentTourStep < tourRoute.length) {
                 // Mid-tour steps - Trigger detailed route fetch
                 const target = tourRoute[currentTourStep];
                 document.getElementById('currentNavInstruction').textContent = `Navigating to Stop ${currentTourStep}/${totalStops}: ${target.title}`;
-                
+
                 // Only initiate route if steps haven't been loaded yet for this segment
                 if (!target.steps) {
                     initiateRoute();
                 }
-                
+
             } else {
                 // Tour finished
                 document.getElementById('currentNavInstruction').textContent = "Tour Completed!";
@@ -900,20 +946,20 @@
                 document.getElementById('navActionButton').disabled = false;
             }
         }
-        
+
         const nextSegment = () => {
-             if (currentTourStep < tourRoute.length - 1) {
+            if (currentTourStep < tourRoute.length - 1) {
                 // Advance to the next landmark
                 currentTourStep++;
                 // Reset maneuver index for the new segment
-                currentManeuverIndex = 0; 
+                currentManeuverIndex = 0;
                 updateNavigationPanel();
             } else if (currentTourStep === 0) {
-                 // Initial click on "Start Navigation"
-                 currentTourStep = 1;
-                 updateNavigationPanel(); // This triggers initiateRoute()
+                // Initial click on "Start Navigation"
+                currentTourStep = 1;
+                updateNavigationPanel(); // This triggers initiateRoute()
             }
-             else if (currentTourStep === tourRoute.length - 1) {
+            else if (currentTourStep === tourRoute.length - 1) {
                 // End Tour logic
                 if (tourPath) map.removeLayer(tourPath);
                 tourRoute = null;
@@ -927,17 +973,17 @@
         const checkTourProgress = (userLatLong) => {
             // Only perform GPS checks if we are actively navigating to a landmark
             if (!tourRoute || currentTourStep < 1 || currentTourStep >= tourRoute.length || !tourRoute[currentTourStep].steps) {
-                 if (currentTourStep > 0 && userMarker) {
+                if (currentTourStep > 0 && userMarker) {
                     // Pan map to keep user in center during navigation
-                    map.panTo(userMarker.getLatLng(), {animate: true, duration: 1.0});
-                 }
-                 return;
+                    map.panTo(userMarker.getLatLng(), { animate: true, duration: 1.0 });
+                }
+                return;
             }
 
             const target = tourRoute[currentTourStep];
             const userLat = userLatLong[0];
             const userLon = userLatLong[1];
-            
+
             const distanceToDestination = getDistance(userLat, userLon, target.lat, target.lon);
             const arrivalThreshold = 50; // 50 meters
 
@@ -948,18 +994,18 @@
                 document.getElementById('nextLandmarkInfo').textContent = `You have reached this location. Press 'Next Stop' to continue the tour.`;
                 return;
             }
-            
+
             // --- 2. Get Next Maneuver Instruction ---
             const maneuverResult = findNextManeuver(userLat, userLon, target.steps);
-            
+
             // Update the Panel with GPS Instructions
             if (!maneuverResult.finished) {
                 const distanceMeters = maneuverResult.distance.toFixed(0);
-                
+
                 document.getElementById('currentNavInstruction').innerHTML = `
                     <span class="font-bold">${maneuverResult.instruction}</span>
                 `;
-                
+
                 document.getElementById('nextLandmarkInfo').innerHTML = `
                     Distance to turn: <span class="font-bold">${distanceMeters} meters</span>.
                     <br>
@@ -978,11 +1024,12 @@
             }
 
             // --- 3. Keep User Centered and Zoomed ---
-            map.panTo(userMarker.getLatLng(), {animate: true, duration: 1.0});
+            map.panTo(userMarker.getLatLng(), { animate: true, duration: 1.0 });
             if (map.getZoom() < 18) map.setZoom(18);
         }
 
         document.addEventListener('DOMContentLoaded', initMap);
     </script>
 </body>
+
 </html>
