@@ -5,47 +5,82 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Historic Landmark Explorer</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20n6c65A8dD2EaX6dG8BfFz2u6G2YkR/x3+t6M9A5E0="
-        crossorigin=""></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN8cPDZZAqP1CvWdoU2A5q+TjF+YJpwa8="
-        crossorigin=""/>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
     <style>
-        /* Custom font */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
         
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f7f9fc;
         }
-        #map {
-            /* Ensures 100% height relative to its flex parent */
-            height: 100%;
-            z-index: 10; 
-        }
         .leaflet-container {
             font-family: 'Inter', sans-serif;
+        }
+        /* Custom Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none; 
+            background: transparent; 
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #ffffff;
+            cursor: pointer;
+            margin-top: -6px; 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #a5b4fc; /* Indigo-300 */
+            border-radius: 2px;
         }
     </style>
 </head>
 <body class="flex flex-col h-screen overflow-hidden">
 
     <!-- Header -->
-    <header class="bg-indigo-600 shadow-xl z-50 p-4">
-        <h1 class="text-2xl font-bold text-white">Historic Places Explorer</h1>
-        <p class="text-indigo-200 text-sm">Real data from the National Register of Historic Places</p>
+    <header class="bg-indigo-600 shadow-xl z-50 p-4 flex flex-col md:flex-row items-center justify-between gap-4 flex-none">
+        <div>
+            <h1 class="text-2xl font-bold text-white">Historic Places Explorer</h1>
+            <p class="text-indigo-200 text-sm">Searching Open Historic Data</p>
+        </div>
+
+        <!-- Radius Control -->
+        <div class="bg-indigo-700 rounded-lg p-3 flex items-center gap-4 w-full md:w-auto">
+            <label for="radiusSlider" class="text-white text-sm font-medium whitespace-nowrap">Search Radius:</label>
+            <input type="range" id="radiusSlider" min="0.5" max="10" step="0.5" value="1" class="w-full md:w-48">
+            <span id="radiusValue" class="text-white font-bold text-sm w-16 text-right">1 mi</span>
+        </div>
     </header>
 
     <!-- Map Container -->
-    <div id="map" class="flex-grow"></div>
+    <div id="map" class="flex-1 w-full relative z-0 bg-gray-200"></div>
+
+    <!-- Location Status Notification -->
+    <div id="locationStatus" class="fixed top-24 left-1/2 transform -translate-x-1/2 bg-white px-4 py-2 rounded-full shadow-lg z-[1000] flex items-center gap-2 transition-opacity duration-500 opacity-0 pointer-events-none">
+        <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+        <span class="text-sm font-medium text-gray-700" id="locationStatusText">Locating...</span>
+    </div>
 
     <!-- Landmark Details Card (Modal-style) -->
     <div id="detailsCard" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-40 hidden flex items-center justify-center p-4" onclick="closeCard()">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-md md:max-w-lg lg:max-w-2xl overflow-hidden transform transition-all duration-300 scale-100" onclick="event.stopPropagation()">
             <!-- Card Header -->
             <div class="p-5 border-b border-gray-100 flex justify-between items-start bg-indigo-50">
-                <h2 id="cardTitle" class="text-xl md:text-2xl font-extrabold text-gray-800">Landmark Details</h2>
+                <div>
+                    <h2 id="cardTitle" class="text-xl md:text-2xl font-extrabold text-gray-800">Landmark Details</h2>
+                    <p id="cardSubtitle" class="text-xs text-indigo-200 mt-1 hidden"></p>
+                </div>
                 <button onclick="closeCard()" class="text-gray-400 hover:text-gray-600 transition">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
@@ -54,7 +89,6 @@
             <!-- Card Body -->
             <div class="p-5 max-h-[70vh] overflow-y-auto">
                 <div id="cardContent" class="text-gray-700 space-y-4">
-                    <!-- Dynamic content will be loaded here -->
                     <div id="summarySection">
                         <h3 class="text-lg font-semibold text-indigo-700 mb-2">Historical Summary (Powered by Gemini)</h3>
                         <div id="summaryText" class="text-sm leading-relaxed">
@@ -85,147 +119,263 @@
     </div>
 
     <script type="module">
-        // Import Firebase modules
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- GLOBAL CONFIG & INITIALIZATION ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        const apiKey = ""; // API key for Gemini
+        const apiKey = ""; 
 
         let app, db, auth;
         let userId = null;
         let isAuthReady = false;
 
-        // Landmark data from the National Register of Historic Places (NRHP)
-        // A curated list of 10 iconic US landmarks with their actual coordinates.
-        const landmarks = [
-            { id: 'statue_liberty', name: 'Statue of Liberty', lat: 40.689249, lng: -74.044500, description: 'National Monument in New York Harbor.' },
-            { id: 'golden_gate', name: 'Golden Gate Bridge', lat: 37.819929, lng: -122.478256, description: 'Iconic suspension bridge connecting San Francisco Bay and the Pacific Ocean.' },
-            { id: 'alcatraz', name: 'Alcatraz Island', lat: 37.826978, lng: -122.422998, description: 'Famous former prison island in San Francisco Bay.' },
-            { id: 'white_house', name: 'The White House', lat: 38.8977, lng: -77.0366, description: 'Official residence and workplace of the President of the United States.' },
-            { id: 'lincoln_memorial', name: 'Lincoln Memorial', lat: 38.8892, lng: -77.0506, description: 'American national monument built to honor the 16th President of the United States, Abraham Lincoln.' },
-            { id: 'independence_hall', name: 'Independence Hall', lat: 39.9488, lng: -75.1500, description: 'The site where both the Declaration of Independence and the Constitution were debated and adopted.' },
-            { id: 'mound_city_group', name: 'Mound City Group National Historical Park', lat: 39.3783, lng: -83.0031, description: 'Preserves 23 burial mounds built by the Hopewell culture.' },
-            { id: 'mesa_verde', name: 'Mesa Verde National Park', lat: 37.1822, lng: -108.4907, description: 'Preserves the rich cultural heritage of the Ancestral Pueblo people.' },
-            { id: 'chaco_culture', name: 'Chaco Culture National Historical Park', lat: 36.0601, lng: -107.9542, description: 'A center of ancestral Pueblo culture.' },
-            { id: 'pearl_harbor', name: 'Pearl Harbor National Memorial', lat: 21.3653, lng: -157.9478, description: 'Commemorates the 1941 attack on Pearl Harbor.' }
-        ];
+        // App State
+        let map = null;
+        let currentLat = 39.8283; // Default: Center of US
+        let currentLng = -98.5795;
+        let currentRadiusMiles = 1;
+        let markersLayerGroup = null;
+        let userLocationMarker = null;
+        let searchTimeout = null;
 
-        // --- FIREBASE AUTHENTICATION & INITIALIZATION ---
-
-        /**
-         * Initializes Firebase app and services.
-         * The map rendering (initMap) is now called separately to ensure faster load.
-         */
+        // --- FIREBASE SETUP ---
         function initializeFirebase() {
             if (Object.keys(firebaseConfig).length > 0) {
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
-                setLogLevel('debug'); // Enable Firestore logging
-
-                // Set up Auth State Listener
+                setLogLevel('debug'); 
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
-                        console.log("Firebase Auth Ready. User ID:", userId);
                     } else {
-                        // This handles the sign-in process if token is not available (which shouldn't happen in Canvas)
                         try {
-                            if (initialAuthToken) {
-                                await signInWithCustomToken(auth, initialAuthToken);
-                            } else {
-                                await signInAnonymously(auth);
-                            }
+                            if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken);
+                            else await signInAnonymously(auth);
                             userId = auth.currentUser.uid;
-                        } catch (error) {
-                            console.error("Firebase Sign-In Error:", error);
-                            // Fallback to anonymous ID if sign-in fails
-                            userId = crypto.randomUUID();
-                        }
+                        } catch (e) { console.error(e); userId = crypto.randomUUID(); }
                     }
                     isAuthReady = true;
-                    // initMap() REMOVED from here to allow map to load instantly.
                 });
             } else {
-                console.error("Firebase config is missing or invalid. Running without persistent storage.");
-                // Fallback for environment without Firebase
                 userId = crypto.randomUUID();
                 isAuthReady = true;
-                // initMap() REMOVED from here.
             }
         }
 
-        // --- FIRESTORE UTILITIES ---
-
-        /**
-         * Generates the path for a landmark's details (public data).
-         * @param {string} landmarkId The ID of the landmark.
-         * @returns {string} The full Firestore document path.
-         */
         function getLandmarkDocPath(landmarkId) {
-            // Public data path: /artifacts/{appId}/public/data/landmarks/{landmarkId}
-            return `artifacts/${appId}/public/data/landmarks/${landmarkId}`;
+            // Sanitize ID for Firestore path
+            const safeId = landmarkId.toString().replace(/[^a-zA-Z0-9]/g, '_');
+            return `artifacts/${appId}/public/data/landmarks/${safeId}`;
         }
 
-        // --- MAP AND UI FUNCTIONS ---
+        // --- GEOLOCATION & OVERPASS API ---
 
-        let map = null;
-
-        /**
-         * Initializes the Leaflet map and adds markers for all landmarks.
-         */
-        function initMap() {
-            if (map) return; // Prevent double initialization
+        function updateStatus(msg, isError = false) {
+            const el = document.getElementById('locationStatus');
+            const text = document.getElementById('locationStatusText');
+            const dot = el.querySelector('div');
             
-            // Explicitly use window.L to access the global Leaflet object
+            text.textContent = msg;
+            el.classList.remove('opacity-0');
+            
+            if (isError) {
+                dot.classList.remove('bg-green-500', 'animate-pulse');
+                dot.classList.add('bg-red-500');
+            } else {
+                dot.classList.remove('bg-red-500');
+                dot.classList.add('bg-green-500', 'animate-pulse');
+            }
+
+            // Auto hide after 3s
+            setTimeout(() => { el.classList.add('opacity-0'); }, 3000);
+        }
+
+        function getUserLocation() {
+            if (!navigator.geolocation) {
+                updateStatus("Geolocation not supported", true);
+                return;
+            }
+            
+            updateStatus("Finding location...");
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    currentLat = position.coords.latitude;
+                    currentLng = position.coords.longitude;
+                    
+                    updateStatus("Location found!");
+                    
+                    // Move map
+                    if (map) {
+                        map.setView([currentLat, currentLng], 14);
+                        addUserMarker();
+                        fetchNearbyLandmarks();
+                    }
+                },
+                (error) => {
+                    console.error("Location error:", error);
+                    updateStatus("Location access denied. Using default.", true);
+                    // Load default area landmarks anyway
+                    if (map) fetchNearbyLandmarks(); 
+                },
+                { enableHighAccuracy: true }
+            );
+        }
+
+        function addUserMarker() {
+            if (!map) return;
+            if (userLocationMarker) map.removeLayer(userLocationMarker);
+            
+            const userIcon = window.L.divIcon({
+                className: 'bg-blue-600 border-2 border-white rounded-full shadow-lg',
+                iconSize: [16, 16],
+                html: ''
+            });
+            
+            userLocationMarker = window.L.marker([currentLat, currentLng], {icon: userIcon})
+                .addTo(map)
+                .bindPopup("You are here");
+        }
+
+        async function fetchNearbyLandmarks() {
+            if (!map) return;
+            
+            const radiusMeters = currentRadiusMiles * 1609.34;
+            updateStatus(`Searching within ${currentRadiusMiles} mile(s)...`);
+
+            // Overpass API Query: Nodes, Ways, Relations with [historic] tag and [name] tag
+            // around current location.
+            const query = `
+                [out:json][timeout:25];
+                (
+                  node["historic"]["name"](around:${radiusMeters},${currentLat},${currentLng});
+                  way["historic"]["name"](around:${radiusMeters},${currentLat},${currentLng});
+                  relation["historic"]["name"](around:${radiusMeters},${currentLat},${currentLng});
+                );
+                out center;
+            `;
+
+            const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Overpass API request failed");
+                
+                const data = await response.json();
+                displayLandmarks(data.elements);
+                updateStatus(`Found ${data.elements.length} historic places`);
+            } catch (error) {
+                console.error("Error fetching landmarks:", error);
+                updateStatus("Error fetching data", true);
+            }
+        }
+
+        function displayLandmarks(elements) {
+            if (!map) return;
+            
+            // Clear existing markers
+            if (markersLayerGroup) {
+                markersLayerGroup.clearLayers();
+            } else {
+                markersLayerGroup = window.L.layerGroup().addTo(map);
+            }
+
+            if (elements.length === 0) return;
+
+            const historicIcon = window.L.divIcon({
+                className: 'bg-transparent',
+                html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8 text-red-700 drop-shadow-md"><path fill-rule="evenodd" d="M11.54 22.351l.07.074.072.069a.75.75 0 0 0 1.002 0l.07-.069.074-.075a2.784 2.784 0 0 0 .812-1.969h-.008c.594-.65.94-1.423.94-2.316l.001-2.906c0-3.328-2.34-6.002-5.166-6.444l-.24-.031a.75.75 0 0 0-.274-.012l-.2-.007-.015-.001-.013-.001c-3.238 0-5.875 2.637-5.875 5.875v2.906c0 .893.346 1.666.94 2.316h-.008c2.008 2.213 3.931 3.5 4.5 3.5.569 0 2.492-1.287 4.5-3.5h-.008Zm-.202-.676l-.041-.043-.035-.035c-.098-.097-.215-.2-.341-.318l-.053-.049c-.436-.421-.86-.788-1.246-1.071l-.104-.08c-1.127-.852-2.126-1.558-2.888-2.079l-.022-.015c-.443-.314-.84-.59-1.192-.816a3.84 3.84 0 0 1-.502-.303c-.22-.167-.428-.352-.619-.554a4.342 4.342 0 0 1-.458-.696c-.228-.415-.346-.86-.346-1.309V11.25a4.375 4.375 0 0 1 8.75 0v1.791c0 .448-.118.894-.346 1.309a4.342 4.342 0 0 1-.458.696c-.191.202-.399.387-.619.554a3.84 3.84 0 0 1-.502.303c-.352.226-.749.502-1.192.816l-.022.015c-.762.521-1.761 1.227-2.888 2.079l-.104.08c-.386.283-.81.65-1.246 1.071l-.053.049c-.126.118-.243.22-.341.318l-.035.035-.041.043-.058.056Z" clip-rule="evenodd" /></svg>`,
+                iconSize: [32, 32],
+                iconAnchor: [16, 32],
+                popupAnchor: [0, -32]
+            });
+
+            elements.forEach(place => {
+                let lat, lng;
+                if (place.type === 'node') {
+                    lat = place.lat;
+                    lng = place.lon;
+                } else if (place.center) {
+                    lat = place.center.lat;
+                    lng = place.center.lon;
+                } else {
+                    return; // Skip if no coords
+                }
+
+                const name = place.tags.name || "Unknown Historic Site";
+                const type = place.tags.historic || "Historic Site";
+                const id = place.id; // OSM ID
+
+                // Add marker
+                const marker = window.L.marker([lat, lng], { icon: historicIcon })
+                    .bindPopup(
+                        `<div class="text-center">
+                            <h4 class="font-bold text-indigo-700 mb-1">${name}</h4>
+                            <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">${type}</span>
+                            <button class="block w-full mt-3 text-sm text-white bg-indigo-500 hover:bg-indigo-600 px-3 py-1 rounded shadow-sm transition" 
+                                onclick="openCard('${id}', '${name.replace(/'/g, "\\'")}', '${type}')">
+                                Learn More
+                            </button>
+                        </div>`
+                    );
+                
+                markersLayerGroup.addLayer(marker);
+            });
+        }
+
+        // --- MAP INITIALIZATION ---
+
+        function initMap() {
+            if (map) return;
+            
             if (typeof window.L === 'undefined' || !window.L.map) {
-                console.error("Leaflet (L) is not defined. Map cannot be initialized.");
+                console.log("Leaflet not ready, polling...");
+                setTimeout(initMap, 100);
                 return;
             }
 
-            // Initialize map centered near the center of the US for a good overview
-            map = window.L.map('map').setView([39.8283, -98.5795], 4);
-            console.log("Leaflet map object created.");
+            if (!document.getElementById('map')) return;
 
-            // FIX: Immediately force an invalidateSize call for flexbox rendering issues.
-            map.invalidateSize({ pan: false, animate: false }); 
+            console.log("Initializing map...");
+            map = window.L.map('map').setView([currentLat, currentLng], 4);
+            map.invalidateSize();
 
             window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                attribution: '&copy; OpenStreetMap contributors'
             }).addTo(map);
 
-            // Add markers for all historical landmarks
-            landmarks.forEach(landmark => {
-                const marker = window.L.marker([landmark.lat, landmark.lng]).addTo(map)
-                    .bindPopup(
-                        `<h4 class="font-bold text-indigo-700">${landmark.name}</h4>
-                        <p class="text-xs">${landmark.description}</p>
-                        <button class="mt-2 text-sm text-white bg-indigo-500 hover:bg-indigo-600 px-3 py-1 rounded-full shadow-md" 
-                                onclick="openCard('${landmark.id}', '${landmark.name.replace(/'/g, "\\'")}')">
-                            Explore History
-                        </button>`
-                    );
-            });
-            
-            // Secondary critical fix: Use a slightly longer delay before calling invalidateSize() 
-            // again to ensure the DOM layout is fully settled.
-            setTimeout(() => {
-                console.log("Running second invalidateSize() after timeout.");
-                map.invalidateSize();
-            }, 100); 
+            markersLayerGroup = window.L.layerGroup().addTo(map);
+
+            // Try to get user location immediately
+            getUserLocation();
+
+            // Additional layout fix
+            setTimeout(() => map.invalidateSize(), 250);
         }
 
-        /**
-         * Opens the detail card and triggers data loading.
-         * @param {string} id The unique ID of the landmark.
-         * @param {string} name The name of the landmark.
-         */
-        window.openCard = async function(id, name) {
+        // --- UI INTERACTIONS ---
+
+        // Slider Logic
+        const slider = document.getElementById('radiusSlider');
+        const radiusLabel = document.getElementById('radiusValue');
+
+        slider.addEventListener('input', (e) => {
+            currentRadiusMiles = e.target.value;
+            radiusLabel.textContent = `${currentRadiusMiles} mi`;
+        });
+
+        slider.addEventListener('change', () => {
+            // Fetch only on release (change) to avoid API spam
+            fetchNearbyLandmarks();
+        });
+
+
+        // --- CARD & AI LOGIC ---
+
+        window.openCard = async function(id, name, type) {
             const card = document.getElementById('detailsCard');
             const title = document.getElementById('cardTitle');
             const summaryText = document.getElementById('summaryText');
@@ -233,64 +383,48 @@
             const summarySection = document.getElementById('summarySection');
             const loadingSpinner = document.getElementById('loadingSpinner');
 
-            // 1. Show Card and Set Title
             title.textContent = name;
             summaryText.innerHTML = '<p class="italic text-gray-500">Loading historical details...</p>';
             errorSection.classList.add('hidden');
             summarySection.classList.remove('hidden');
             card.classList.remove('hidden');
             
-            // 2. Try to Load Cached Data from Firestore
+            // Check Cache
             const cachedData = await getCachedDetails(id);
             if (cachedData) {
-                console.log("Using cached data.");
                 updateCardContent(cachedData.summary, cachedData.sources);
                 return;
             }
 
-            // 3. If no cache, fetch from Gemini
-            console.log("No cache found. Fetching from Gemini...");
+            // Fetch AI
             loadingSpinner.classList.remove('hidden');
-            
             try {
-                await fetchLandmarkDetails(id, name);
+                await fetchLandmarkDetails(id, name, type);
             } catch (error) {
-                console.error("Failed to fetch or process landmark details:", error);
                 errorSection.classList.remove('hidden');
-                document.getElementById('errorText').textContent = `Could not load historical summary due to a network or API error. (${error.message || 'Unknown error'})`;
+                document.getElementById('errorText').textContent = error.message;
                 summarySection.classList.add('hidden');
             } finally {
                 loadingSpinner.classList.add('hidden');
             }
         }
 
-        /**
-         * Closes the detail card.
-         */
         window.closeCard = function() {
             document.getElementById('detailsCard').classList.add('hidden');
-            // Reset content
             document.getElementById('summaryText').innerHTML = '<p class="italic text-gray-500">Loading historical details...</p>';
             document.getElementById('sourcesContainer').classList.add('hidden');
         }
 
-        /**
-         * Updates the card with the fetched or cached content.
-         * @param {string} summary The historical summary text.
-         * @param {Array<{uri: string, title: string}>} sources Array of citation sources.
-         */
         function updateCardContent(summary, sources) {
             const summaryText = document.getElementById('summaryText');
             const sourcesContainer = document.getElementById('sourcesContainer');
             const sourcesList = document.getElementById('sourcesList');
 
-            // Format text (simple Markdown to HTML conversion)
             let formattedSummary = summary.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
             formattedSummary = formattedSummary.replace(/\n\n/g, '</p><p>');
             formattedSummary = `<p>${formattedSummary}</p>`;
             summaryText.innerHTML = formattedSummary;
 
-            // Handle sources
             sourcesList.innerHTML = '';
             if (sources && sources.length > 0) {
                 sources.forEach(source => {
@@ -304,61 +438,29 @@
             }
         }
 
-        // --- GEMINI API CALL & CACHING LOGIC ---
-
-        /**
-         * Fetches cached landmark details from Firestore.
-         * @param {string} id The unique ID of the landmark.
-         * @returns {Promise<{summary: string, sources: Array} | null>} Cached data or null.
-         */
         async function getCachedDetails(id) {
             if (!isAuthReady || !db) return null;
-
             const docPath = getLandmarkDocPath(id);
             try {
-                const docRef = doc(db, docPath);
-                const docSnap = await getDoc(docRef);
-                
-                if (docSnap.exists()) {
-                    return docSnap.data();
-                }
-            } catch (error) {
-                console.warn("Error reading cache from Firestore, proceeding to fetch:", error);
-            }
+                const docSnap = await getDoc(doc(db, docPath));
+                if (docSnap.exists()) return docSnap.data();
+            } catch (e) { console.warn(e); }
             return null;
         }
 
-        /**
-         * Caches the generated summary and sources to Firestore.
-         * @param {string} id The unique ID of the landmark.
-         * @param {string} summary The generated summary text.
-         * @param {Array} sources The citation sources.
-         */
         async function cacheDetails(id, summary, sources) {
             if (!isAuthReady || !db) return;
-
             const docPath = getLandmarkDocPath(id);
             try {
-                // Using setDoc with merge: true for simplicity, ensuring we don't overwrite other fields if they existed.
                 await setDoc(doc(db, docPath), {
-                    summary: summary,
-                    sources: sources,
-                    cachedAt: new Date().toISOString()
+                    summary, sources, cachedAt: new Date().toISOString()
                 }, { merge: true });
-                console.log("Landmark details cached successfully.");
-            } catch (error) {
-                console.error("Error writing cache to Firestore:", error);
-            }
+            } catch (e) { console.error(e); }
         }
 
-        /**
-         * Calls the Gemini API to get historical details for a landmark with exponential backoff.
-         * @param {string} id The landmark ID for caching.
-         * @param {string} name The landmark name for the prompt.
-         */
-        async function fetchLandmarkDetails(id, name) {
-            const systemPrompt = "You are a concise, world-class historian. Your task is to provide a single, detailed paragraph (maximum 150 words) summarizing the key historical significance, construction date, and major events associated with the requested landmark. Use formal, engaging language. Do not use bullet points or lists. Do not include a title or introduction.";
-            const userQuery = `Summarize the history and significance of the ${name}.`;
+        async function fetchLandmarkDetails(id, name, type) {
+            const systemPrompt = "You are a concise, world-class historian. Provide a single, detailed paragraph (max 150 words) summarizing the key historical significance, construction date, and major events associated with this landmark.";
+            const userQuery = `Summarize the history and significance of "${name}" (Type: ${type}).`;
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
             const payload = {
@@ -367,67 +469,33 @@
                 systemInstruction: { parts: [{ text: systemPrompt }] },
             };
 
-            const maxRetries = 5;
-            for (let i = 0; i < maxRetries; i++) {
-                try {
-                    const response = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
 
-                    if (!response.ok) {
-                        if (response.status === 429 && i < maxRetries - 1) {
-                            const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
-                            console.warn(`Rate limit hit. Retrying in ${Math.round(delay/1000)}s...`);
-                            await new Promise(resolve => setTimeout(resolve, delay));
-                            continue; // Retry the request
-                        }
-                        throw new Error(`API request failed with status: ${response.statusText}`);
-                    }
+            if (!response.ok) throw new Error("Failed to generate summary.");
 
-                    const result = await response.json();
-                    const candidate = result.candidates?.[0];
+            const result = await response.json();
+            const candidate = result.candidates?.[0];
 
-                    if (candidate && candidate.content?.parts?.[0]?.text) {
-                        const summary = candidate.content.parts[0].text;
-                        let sources = [];
-                        
-                        const groundingMetadata = candidate.groundingMetadata;
-                        if (groundingMetadata && groundingMetadata.groundingAttributions) {
-                            sources = groundingMetadata.groundingAttributions
-                                .map(attribution => ({
-                                    uri: attribution.web?.uri,
-                                    title: attribution.web?.title,
-                                }))
-                                .filter(source => source.uri);
-                        }
-
-                        // Update UI and Cache the result
-                        updateCardContent(summary, sources);
-                        await cacheDetails(id, summary, sources);
-                        return;
-
-                    } else {
-                        throw new Error("API returned an invalid or empty response structure.");
-                    }
-
-                } catch (error) {
-                    if (i === maxRetries - 1) {
-                        // Throw the error if all retries fail
-                        throw new Error(`Failed to fetch landmark details after ${maxRetries} attempts: ${error.message}`);
-                    }
-                    // Continue to the next retry loop
-                }
+            if (candidate && candidate.content?.parts?.[0]?.text) {
+                const summary = candidate.content.parts[0].text;
+                const sources = candidate.groundingMetadata?.groundingAttributions?.map(a => ({uri: a.web?.uri, title: a.web?.title})).filter(s => s.uri) || [];
+                
+                updateCardContent(summary, sources);
+                await cacheDetails(id, summary, sources);
+            } else {
+                throw new Error("AI returned empty response.");
             }
         }
-        
-        // --- START APPLICATION ---
-        // 1. Setup Firebase listeners (asynchronously)
+
+        // Initialize
         document.addEventListener('DOMContentLoaded', initializeFirebase);
-        
-        // 2. Render map UI immediately (synchronously)
-        document.addEventListener('DOMContentLoaded', initMap);
+        // Start map attempt
+        initMap();
+
     </script>
 </body>
 </html>
