@@ -288,7 +288,7 @@
             return R * c; // Distance in meters
         }
 
-        // --- ROUTING & NAVIGATION FUNCTIONS ---
+        // --- ROUTING & NAVIGATION FUNCTIONS (Unchanged) ---
 
         /**
          * Fetches a detailed walking route with steps from OSRM.
@@ -375,29 +375,41 @@
         };
 
 
-        // --- MAP & GEO LOCATION LOGIC ---
+        // --- MAP & GEO LOCATION LOGIC (Updated initMap) ---
 
         const initMap = () => {
-            map = L.map('map', { zoomControl: false }).setView([38.8893, -77.0502], 13);
+             // CRITICAL FIX: Wrap initialization in try/catch and call invalidateSize()
+            try {
+                map = L.map('map', { zoomControl: false }).setView([38.8893, -77.0502], 13);
+                
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                    subdomains: 'abcd',
+                    maxZoom: 20
+                }).addTo(map);
 
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-                subdomains: 'abcd',
-                maxZoom: 20
-            }).addTo(map);
+                // This is a common fix for Leaflet maps inside flex containers that fail to render tiles
+                setTimeout(() => {
+                    map.invalidateSize();
+                }, 100); 
 
-            landmarkMarkers.addTo(map);
-            L.control.zoom({ position: 'bottomright' }).addTo(map);
-            map.on('moveend', fetchAndPinLandmarks);
+                landmarkMarkers.addTo(map);
+                L.control.zoom({ position: 'bottomright' }).addTo(map);
+                map.on('moveend', fetchAndPinLandmarks);
 
-            const radiusSlider = document.getElementById('radiusSlider');
-            radiusSlider.addEventListener('input', (e) => {
-                document.getElementById('radiusValue').textContent = `${e.target.value}km`;
-            });
-            radiusSlider.addEventListener('change', fetchAndPinLandmarks);
+                const radiusSlider = document.getElementById('radiusSlider');
+                radiusSlider.addEventListener('input', (e) => {
+                    document.getElementById('radiusValue').textContent = `${e.target.value}km`;
+                });
+                radiusSlider.addEventListener('change', fetchAndPinLandmarks);
 
-            startWatchingPosition();
-            fetchAndPinLandmarks();
+                startWatchingPosition();
+                fetchAndPinLandmarks();
+
+            } catch (e) {
+                console.error("Map Initialization Failed:", e);
+                showMessage("Map Error", `Failed to initialize the map. Error: ${e.message}`);
+            }
         };
 
         const changeLocation = (lat, lng, name) => {
@@ -499,14 +511,12 @@
         };
 
 
-        // --- TOUR CONFIGURATION & INITIAL ROUTE DRAWING ---
+        // --- TOUR CONFIGURATION & INITIAL ROUTE DRAWING (Unchanged) ---
 
         const openTourPanel = () => {
             document.getElementById('tourPanel').classList.toggle('hidden');
         }
 
-        // --- (Wikipedia Fetching functions omitted for brevity, they remain unchanged) ---
-        // ... (fetchWikipediaLandmarks, fetchAndPinLandmarks, pinLandmark, createTour, etc., remain as before)
         const fetchWikipediaLandmarks = async (lat, lon, radiusKm, keyword) => {
             if (isFetching) return;
             isFetching = true;
@@ -560,10 +570,6 @@
             fetchWikipediaLandmarks(center.lat, center.lng, radiusKm, keyword);
         };
 
-
-        const openTourPanel = () => {
-            document.getElementById('tourPanel').classList.toggle('hidden');
-        }
 
         const createTour = (reset=false) => {
             const maxDistanceMiles = parseFloat(document.getElementById('tourDistance').value);
