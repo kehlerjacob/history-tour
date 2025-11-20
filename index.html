@@ -171,8 +171,8 @@
         let userId = null;
 
         // Configuration 
-        // IMPORTANT: REPLACE 'YOUR_OPENROUTESERVICE_API_KEY' with your actual key.
-        const ORS_API_KEY = "YOUR_OPENROUTESERVICE_API_KEY"; 
+        // ORS_API_KEY has been updated. The round-trip tour feature is now enabled.
+        const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6Ijg1ZWRmZjY2Y2VkZTRkOWVhMmI4NDliNTMxOThhYTY0IiwiaCI6Im11cm11cjY0In0="; 
         const ORS_URL = "https://api.openrouteservice.org/v2/directions/walking/geojson";
 
 
@@ -540,11 +540,8 @@ out center;
         }
 
         window.createTour = async function() {
-            if (ORS_API_KEY === "YOUR_OPENROUTESERVICE_API_KEY") {
-                updateStatus("ERROR: Please replace 'YOUR_OPENROUTESERVICE_API_KEY' in the script with your actual API key.", true, false, 'tourStatus');
-                return;
-            }
-
+            // ORS_API_KEY check is removed as the key is now set
+            
             const desiredDistanceMiles = parseFloat(document.getElementById('tourDistance').value);
             if (isNaN(desiredDistanceMiles) || desiredDistanceMiles <= 0) {
                 updateStatus("Please enter a valid distance.", true, false, 'tourStatus');
@@ -601,7 +598,7 @@ out center;
                         options: {
                             round_trip: { 
                                 points: pointsToUse.length + 1, // Number of stops (user + landmarks)
-                                length: desiredDistanceMiles * 1000 * MILES_TOKM // Target distance in meters
+                                length: desiredDistanceMiles * 1000 * MILES_TO_KM // Target distance in meters
                             }
                         }
                     })
