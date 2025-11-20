@@ -20,9 +20,9 @@
             background-color: #f7f9fc;
         }
         #map {
-            /* Use 100% height relative to parent (flex-grow) */
+            /* Ensures 100% height relative to its flex parent */
             height: 100%;
-            z-index: 10; /* Below the header and card */
+            z-index: 10; 
         }
         .leaflet-container {
             font-family: 'Inter', sans-serif;
@@ -181,17 +181,28 @@
          */
         function initMap() {
             if (map) return; // Prevent double initialization
+            
+            // Explicitly use window.L to access the global Leaflet object
+            if (typeof window.L === 'undefined' || !window.L.map) {
+                console.error("Leaflet (L) is not defined. Map cannot be initialized.");
+                return;
+            }
 
             // Initialize map centered near the center of the US for a good overview
-            map = L.map('map').setView([39.8283, -98.5795], 4);
+            map = window.L.map('map').setView([39.8283, -98.5795], 4);
+            console.log("Leaflet map object created.");
 
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            // FIX: Immediately force an invalidateSize call.
+            // This is often needed right after creation in dynamically sized elements.
+            map.invalidateSize({ pan: false, animate: false }); 
+
+            window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             }).addTo(map);
 
             // Add markers for all historical landmarks
             landmarks.forEach(landmark => {
-                const marker = L.marker([landmark.lat, landmark.lng]).addTo(map)
+                const marker = window.L.marker([landmark.lat, landmark.lng]).addTo(map)
                     .bindPopup(
                         `<h4 class="font-bold text-indigo-700">${landmark.name}</h4>
                         <p class="text-xs">${landmark.description}</p>
@@ -202,9 +213,12 @@
                     );
             });
             
-            // Crucial fix: Forces the map to redraw itself and load tiles, fixing issues
-            // where the container size is not correctly registered on initial load.
-            map.invalidateSize();
+            // Secondary critical fix: Use a slightly longer delay before calling invalidateSize() 
+            // again to ensure the DOM layout (specifically the flex-grow height) is settled.
+            setTimeout(() => {
+                console.log("Running second invalidateSize() after timeout.");
+                map.invalidateSize();
+            }, 100); // Increased to 100ms for stability
         }
 
         /**
