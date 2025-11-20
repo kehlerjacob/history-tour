@@ -33,6 +33,44 @@
             return false;
         };
 
+        // --- PROMISE REJECTION HANDLER ---
+        window.addEventListener('unhandledrejection', function (event) {
+            const errorContainer = document.createElement('div');
+            errorContainer.style.position = 'fixed';
+            errorContainer.style.top = '60px';
+            errorContainer.style.left = '0';
+            errorContainer.style.width = '100%';
+            errorContainer.style.backgroundColor = 'rgba(239, 68, 68, 0.95)'; // Red
+            errorContainer.style.color = 'white';
+            errorContainer.style.padding = '1rem';
+            errorContainer.style.zIndex = '99999';
+            errorContainer.style.fontSize = '12px';
+            errorContainer.style.fontFamily = 'monospace';
+            errorContainer.style.wordBreak = 'break-all';
+            errorContainer.innerHTML = `<strong>PROMISE REJECTION:</strong> ${event.reason}`;
+            document.body.appendChild(errorContainer);
+        });
+
+        // --- CONSOLE ERROR OVERRIDE ---
+        const originalConsoleError = console.error;
+        console.error = function (...args) {
+            originalConsoleError.apply(console, args);
+            const errorContainer = document.createElement('div');
+            errorContainer.style.position = 'fixed';
+            errorContainer.style.top = '120px';
+            errorContainer.style.left = '0';
+            errorContainer.style.width = '100%';
+            errorContainer.style.backgroundColor = 'rgba(185, 28, 28, 0.95)'; // Dark Red
+            errorContainer.style.color = 'white';
+            errorContainer.style.padding = '1rem';
+            errorContainer.style.zIndex = '99999';
+            errorContainer.style.fontSize = '12px';
+            errorContainer.style.fontFamily = 'monospace';
+            errorContainer.style.wordBreak = 'break-all';
+            errorContainer.innerHTML = `<strong>CONSOLE ERROR:</strong> ${args.join(' ')}`;
+            document.body.appendChild(errorContainer);
+        };
+
         // --- SECURE CONTEXT CHECK ---
         if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && window.location.protocol !== 'https:' && window.location.protocol !== 'file:') {
             const warningContainer = document.createElement('div');
