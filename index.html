@@ -13,6 +13,43 @@
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 
+    <script>
+        // --- GLOBAL ERROR HANDLER & DIAGNOSTICS ---
+        window.onerror = function (msg, url, lineNo, columnNo, error) {
+            const errorContainer = document.createElement('div');
+            errorContainer.style.position = 'fixed';
+            errorContainer.style.top = '0';
+            errorContainer.style.left = '0';
+            errorContainer.style.width = '100%';
+            errorContainer.style.backgroundColor = 'rgba(220, 38, 38, 0.95)'; // Red
+            errorContainer.style.color = 'white';
+            errorContainer.style.padding = '1rem';
+            errorContainer.style.zIndex = '99999';
+            errorContainer.style.fontSize = '12px';
+            errorContainer.style.fontFamily = 'monospace';
+            errorContainer.style.wordBreak = 'break-all';
+            errorContainer.innerHTML = `<strong>ERROR:</strong> ${msg}<br>Line: ${lineNo} Col: ${columnNo}<br>URL: ${url}`;
+            document.body.appendChild(errorContainer);
+            return false;
+        };
+
+        // --- SECURE CONTEXT CHECK ---
+        if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && window.location.protocol !== 'https:' && window.location.protocol !== 'file:') {
+            const warningContainer = document.createElement('div');
+            warningContainer.style.position = 'fixed';
+            warningContainer.style.top = '50px';
+            warningContainer.style.left = '0';
+            warningContainer.style.width = '100%';
+            warningContainer.style.backgroundColor = 'rgba(234, 179, 8, 0.95)'; // Yellow
+            warningContainer.style.color = 'black';
+            warningContainer.style.padding = '1rem';
+            warningContainer.style.zIndex = '99999';
+            warningContainer.style.textAlign = 'center';
+            warningContainer.innerHTML = `<strong>WARNING: Geolocation requires HTTPS!</strong><br>You are running on ${window.location.protocol}. GPS may fail.`;
+            document.body.appendChild(warningContainer);
+        }
+    </script>
+
     <!-- Leaflet Polyline Decoders/Encoders - required for OSRM routes -->
     <script src="https://unpkg.com/@mapbox/polyline@1.0.0/src/polyline.js"></script>
 
