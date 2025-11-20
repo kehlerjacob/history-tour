@@ -212,7 +212,7 @@
 
             <!-- Current Step Display -->
             <div class="flex items-start space-x-3 mb-2">
-                <svg id="navInstructionIcon" class="w-6 h-6 flex-shrink-0 mt-1" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.41-7-7.38 0-.47.05-.93.14-1.39l5.86 5.86v2.91zm5.93-5.07l-5.86-5.86c.46-.09.92-.14 1.39-.14 3.97 0 6.89 3.05 7.38 7zm-5.93-10.79l5.86 5.86c-.46.09-.92-.14 1.39-.14-3.97 0-6.89-3.05-7.38-7zm-5.93 5.07l5.86 5.86c-.46.09-.92-.14-1.39-.14-3.97 0-6.89-3.05-7.38-7z"/></svg>
+                <svg id="navInstructionIcon" class="w-6 h-6 flex-shrink-0 mt-1" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.41-7-7.38 0-.47.05-.93.14-1.39l5.86 5.86v2.91zm5.93-5.07l-5.86-5.86c.46-.09.92-.14 1.39-.14 3.97 0 6.89 3.05 7.38 7zm-5.93-10.79l5.86 5.86c-.46.09-.92-.14-1.39-.14-3.97 0-6.89-3.05-7.38-7zm-5.93 5.07l5.86 5.86c-.46.09-.92-.14-1.39-.14-3.97 0-6.89-3.05-7.38-7z"/></svg>
                 <h2 id="currentNavInstruction" class="text-xl sm:text-2xl font-semibold leading-tight">Waiting for Tour...</h2>
             </div>
             
@@ -315,6 +315,31 @@
             return R * c; // Distance in meters
         }
 
+        // --- NEW UTILITY FUNCTION: CARDINAL DIRECTION CONVERSION ---
+        /**
+         * Converts a numerical heading (0-360 degrees) into a cardinal direction string (e.g., "N", "SW").
+         * @param {number} degrees - The heading in degrees.
+         * @returns {string} The cardinal direction.
+         */
+        function getCardinalDirection(degrees) {
+            if (degrees === null || typeof degrees === 'undefined' || isNaN(degrees)) {
+                return 'N/A';
+            }
+            
+            // Normalize degrees to 0-360
+            degrees = (degrees % 360 + 360) % 360; 
+
+            const directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+            // Each direction covers 360 / 16 = 22.5 degrees.
+            // Half a sector is 22.5 / 2 = 11.25 degrees.
+            // We shift the heading by half a sector and divide by the sector size.
+            const index = Math.floor((degrees + 11.25) / 22.5);
+            
+            return directions[index % 16];
+        }
+        // --- END NEW UTILITY FUNCTION ---
+
+
         // --- UPDATED: SENSOR DATA HANDLER (Now updates DOM directly for smoothness) ---
         /**
          * Listens to deviceorientation event and updates the global heading variable 
@@ -345,10 +370,11 @@
                 // We rotate the arrow. CSS rotation starts at 0 degrees (Up/North).
                 // We rotate by 360 - heading so the tip points North.
                 const pointerRotation = magneticHeading; // Rotate by the heading value itself
-
+                const cardinal = getCardinalDirection(magneticHeading); // Get cardinal direction
+                
                 arrow.style.transform = `rotate(${pointerRotation}deg)`;
                 
-                const headingText = `${magneticHeading.toFixed(1)}° (Compass)`;
+                const headingText = `${cardinal} (${magneticHeading.toFixed(1)}°) (Compass)`;
                 
                 // Update the status text with the current heading
                 if (locationStatusText) {
@@ -357,6 +383,7 @@
                     const headingIndex = currentText.indexOf('(Hdg:');
                     
                     if (headingIndex > -1) {
+                         // Extract the part before the heading and append the new heading
                          locationStatusText.innerHTML = currentText.substring(0, headingIndex) + `(Hdg: ${headingText})`;
                     } else {
                         // Fallback if Lat/Lng not loaded yet
@@ -495,7 +522,7 @@
         };
 
 
-        // --- MAP & GEO LOCATION LOGIC (Updated startWatchingPosition) ---
+        // --- MAP & GEO LOCATION LOGIC (Updated watchPositionSuccess) ---
 
         const initMap = () => {
              // CRITICAL FIX: Wrap initialization in try/catch and call invalidateSize()
@@ -599,7 +626,6 @@
 
         /**
          * Handles successful GPS position update.
-         * Note: Arrow rotation and heading text display are now handled by handleCompassUpdate()
          */
         const watchPositionSuccess = (position) => {
             // Note: position.coords.heading is Course Over Ground (direction of movement), often null when stationary.
@@ -632,9 +658,12 @@
                 headingSource = "GPS";
             }
             
+            // --- UPDATED: Display both degrees and cardinal direction ---
+            const cardinalDirection = getCardinalDirection(displayHeading);
+
             const headingText = displayHeading !== null 
-                                ? `${displayHeading.toFixed(1)}° (${headingSource})`
-                                : "N/A";
+                                ? `${cardinalDirection} (${displayHeading.toFixed(1)}°) (${headingSource})`
+                                : `N/A (${cardinalDirection}) (No sensor data)`;
             
             // Update Status Bubble - Location and Heading
             document.getElementById('locationStatusText').innerHTML = `
@@ -642,6 +671,7 @@
                 Lng: ${longitude.toFixed(4)} 
                 <span class="text-indigo-400 ml-2">(Hdg: ${headingText})</span>
             `;
+            // --- END UPDATED ---
             
             // Handle tour progression and instruction updates
             checkTourProgress(newLatLong);
