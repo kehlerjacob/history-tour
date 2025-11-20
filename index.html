@@ -678,10 +678,10 @@
             const locationStatus = document.getElementById('locationStatus');
             const locationStatusText = document.getElementById('locationStatusText');
 
-            // 1. Check for Compass Permission Requirement (iOS) and request immediately
+            // 1. Check for Compass Permission Requirement (iOS) - SHOW BUTTON, don't auto-request
             if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                // Call the permission handler immediately on load
-                handleCompassPermissionRequest();
+                // iOS requires user gesture - show the button for manual click
+                document.getElementById('enableCompassBtn').classList.remove('hidden');
             } else {
                 // For other browsers, assume implicit permission is available
                 if (window.DeviceOrientationEvent) {
