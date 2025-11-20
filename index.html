@@ -3,1251 +3,255 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Historic Landmark Map</title>
+    <title>Advanced GPS Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-    
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-        
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f7f9fc;
+            background-color: #f3f4f6;
+            min-height: 100vh;
         }
-        .leaflet-container {
-            font-family: 'Inter', sans-serif;
+        .header-bar {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
         }
-        /* Custom styles for the map pin images loaded by Leaflet's default marker logic */
-        .leaflet-default-icon-path {
-            background-image: url('https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png');
+        .location-bubble {
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+            line-height: 1.4;
         }
-        input[type=range] {
-            -webkit-appearance: none; 
-            background: transparent; 
-        }
-        input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            height: 16px;
-            width: 16px;
-            border-radius: 50%;
-            background: #ffffff;
-            cursor: pointer;
-            margin-top: -6px; 
-            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-        }
-        input[type=range]::-webkit-slider-runnable-track {
-            width: 100%;
-            height: 4px;
-            cursor: pointer;
-            background: #a5b4fc; 
-            border-radius: 2px;
-        }
-
-        /* User Marker Arrow */
-        .user-arrow-marker {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 40px !important;
-            height: 40px !important;
-            margin-left: -20px !important;
-            margin-top: -20px !important;
-        }
-
-        /* Message Box for custom alerts */
-        #messageBox {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 5000;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            pointer-events: none;
-        }
-        #messageBox.visible {
-            opacity: 1;
-            pointer-events: auto;
+        .data-point {
+            @apply flex-1 text-center border-r border-indigo-200 last:border-r-0 px-2 sm:px-4;
         }
     </style>
 </head>
-<body class="flex flex-col h-screen overflow-hidden">
+<body class="p-4 sm:p-6">
 
-    <!-- Message Box (Custom Alert) -->
-    <div id="messageBox" class="p-6 bg-white rounded-xl shadow-2xl max-w-sm w-full">
-        <h3 id="messageTitle" class="text-lg font-bold mb-2 text-gray-800">Alert</h3>
-        <p id="messageText" class="text-sm text-gray-600 mb-4">Content</p>
-        <button onclick="document.getElementById('messageBox').classList.remove('visible')" class="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700">
-            OK
-        </button>
-    </div>
-
-    <!-- Header -->
-    <header class="bg-indigo-600 shadow-xl z-50 p-4 flex flex-col gap-3 flex-none">
-        
-        <!-- Title and Search/Tour Controls -->
-        <div class="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div>
-                <h1 class="text-2xl font-bold text-white">Historic Places Explorer</h1>
-                <p class="text-indigo-200 text-sm">OpenStreetMap Data (via Overpass)</p>
-            </div>
-
-            <!-- Search Controls & Tour Button -->
-            <div class="flex flex-wrap items-center justify-center gap-4">
-                 <div class="bg-indigo-700 rounded-lg p-3 flex items-center gap-4 w-full md:w-auto">
-                    <label for="radiusSlider" class="text-white text-sm font-medium whitespace-nowrap">Search Radius:</label>
-                    <input type="range" id="radiusSlider" min="1" max="20" step="1" value="10" class="w-full md:w-48">
-                    <span id="radiusValue" class="text-white font-bold text-sm w-16 text-right">10 mi</span>
-
-                    <button id="compassPermissionButton" class="bg-red-500 hover:bg-red-400 text-white text-sm font-bold py-2 px-3 rounded-lg shadow transition whitespace-nowrap hidden">
-                        Enable Compass
-                    </button>
-                </div>
-                
-                <!-- Tour Button -->
-                <button id="startTourButton" onclick="openTourPanel()" class="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold py-3 px-4 rounded-lg shadow transition whitespace-nowrap">
-                    Start Tour
-                </button>
-            </div>
-        </div>
-        
-        <!-- Location Quick-Switch Buttons -->
-        <div class="flex flex-wrap gap-2 justify-center pt-2 border-t border-indigo-700">
-            <span class="text-indigo-200 text-sm font-medium self-center hidden sm:block">Quick Change:</span>
-            <button onclick="changeLocation(38.8893, -77.0502, 'Washington D.C.')" class="bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-bold py-1.5 px-3 rounded-full shadow transition">Washington D.C.</button>
-            <button onclick="changeLocation(40.7580, -73.9855, 'Midtown Manhattan')" class="bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-bold py-1.5 px-3 rounded-full shadow transition">Midtown Manhattan</button>
-            <button onclick="changeLocation(51.5074, 0.1278, 'London')" class="bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-bold py-1.5 px-3 rounded-full shadow transition">London, UK</button>
-        </div>
+    <!-- Header Bar -->
+    <header id="header-bar" class="fixed top-0 left-0 right-0 bg-indigo-700 text-white p-4 z-10">
+        <h1 class="text-xl font-bold tracking-tight">Real-Time Navigation System</h1>
     </header>
 
-
-    <!-- Tour Panel (Hidden by default, used for configuration before tour starts) -->
-    <div id="tourPanel" class="hidden absolute top-[10rem] right-4 bg-white p-4 rounded-xl shadow-2xl z-[1500] w-72">
-        <h3 class="font-bold text-lg text-indigo-700 mb-3 flex justify-between items-center">
-            Configure Tour
-            <button onclick="document.getElementById('tourPanel').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </button>
-        </h3>
-        <label for="tourDistance" class="block text-sm font-medium text-gray-700 mb-1">Max Tour Distance (Miles):</label>
-        <div class="flex gap-2">
-            <input type="number" id="tourDistance" min="1" max="15" value="5" step="0.5" class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5">
-            <button onclick="createTour(true)" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition flex-shrink-0" id="tourConfigBtn">
-                Create
-            </button>
-        </div>
-        <p id="tourStatus" class="text-xs mt-2 text-gray-500">Finds closest pins and optimizes for distance.</p>
-    </div>
-
-    <!-- Map Container -->
-    <div id="map" class="flex-1 w-full bg-gray-200"></div>
-
-    <!-- Location Status (General GPS feedback) -->
-    <div id="locationStatus" class="fixed top-24 left-1/2 transform -translate-x-1/2 bg-white px-4 py-2 rounded-full shadow-lg z-[990] flex items-center gap-2 transition-opacity duration-500 opacity-0 pointer-events-none">
-        <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-        <span class="text-sm font-medium text-gray-700" id="locationStatusText">Locating...</span>
-    </div>
-
-    <!-- NAVIGATION PANEL (Green Bar - Fixed to Bottom) -->
-    <div id="navigationPanel" class="fixed inset-x-0 bottom-0 bg-green-600 text-white p-4 sm:p-6 shadow-2xl rounded-t-3xl transition-all duration-300 transform translate-y-full opacity-0 z-[2000] h-48 sm:h-auto">
-        <div class="max-w-xl mx-auto flex flex-col h-full">
-
-            <!-- Current Step Display -->
-            <div class="flex items-start space-x-3 mb-2">
-                <!-- Icon: Placeholder for a directional icon -->
-                <svg id="navInstructionIcon" class="w-6 h-6 flex-shrink-0 mt-1" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.41-7-7.38 0-.47.05-.93.14-1.39l5.86 5.86v2.91zm5.93-5.07l-5.86-5.86c.46-.09.92-.14 1.39-.14 3.97 0 6.89 3.05 7.38 7zm-5.93-10.79l5.86 5.86c-.46.09-.92-.14-1.39-.14-3.97 0-6.89-3.05-7.38-7zm-5.93 5.07l5.86 5.86c-.46.09-.92-.14-1.39-.14-3.97 0-6.89-3.05-7.38-7z"/></svg>
-                <h2 id="currentNavInstruction" class="text-xl sm:text-2xl font-semibold leading-tight">Waiting for Tour...</h2>
-            </div>
-            
-            <!-- Next Steps & Progress -->
-            <div class="flex justify-between items-end mt-1 mb-4 border-t border-green-500 pt-3">
-                <p id="nextLandmarkInfo" class="text-sm opacity-90 leading-relaxed max-w-[70%]">Next: Please start a tour using the button above.</p>
-                <p id="navStepCounter" class="text-sm font-medium opacity-80 flex-shrink-0 ml-4">0/0</p>
-            </div>
-
-            <!-- Action Button -->
-            <div class="flex-grow flex items-end">
-                <button id="navActionButton" onclick="nextSegment()" class="w-full bg-white text-green-700 font-bold py-3 px-6 rounded-full shadow-lg hover:bg-gray-200 transition duration-150 transform hover:scale-[1.01] focus:outline-none focus:ring-4 focus:ring-green-400 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-                    Next Landmark (Wait for Arrival)
-                </button>
+    <main class="mt-20">
+        <!-- Live Location/Heading Bubble -->
+        <div id="location-bubble" class="location-bubble bg-white text-indigo-800 p-4 rounded-xl mb-6 ring-4 ring-indigo-500/50">
+            <p class="text-sm font-semibold mb-1 text-indigo-500">CURRENT STATUS</p>
+            <div id="status-display" class="flex flex-wrap items-center justify-between text-lg font-bold">
+                <!-- Location, Speed, and Heading will be inserted here by JS -->
+                <span class="data-point">Lat/Lon: Loading...</span>
+                <span class="data-point">Speed: 0.0 kph</span>
+                <span class="data-point">Heading: N/A</span>
             </div>
         </div>
-    </div>
 
+        <!-- Quick Change (Destination) Dropdown -->
+        <div class="mb-8">
+            <button id="toggle-quick-change" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-3 px-4 rounded-xl shadow-md transition duration-150 ease-in-out flex justify-between items-center" onclick="toggleQuickChange()">
+                <span>Quick Change Destination</span>
+                <svg id="dropdown-icon" class="w-5 h-5 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
 
-    <!-- Landmark Details Card (For clicking pins) -->
-    <!-- Retained for manual pin clicks, but not used during active navigation -->
-    <div id="detailsCard" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-[3000] hidden flex items-center justify-center p-4" onclick="closeCard()">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md md:max-w-lg lg:max-w-2xl overflow-hidden transform transition-all duration-300 scale-100" onclick="event.stopPropagation()">
-            <!-- Card Header -->
-            <div class="p-5 border-b border-gray-100 flex justify-between items-start bg-indigo-50">
+            <!-- Destination Inputs (Hidden by default) -->
+            <div id="quick-change-content" class="hidden bg-white p-6 rounded-xl shadow-lg mt-2 space-y-4">
+                <p class="text-indigo-700 font-medium">Set a New Destination</p>
                 <div>
-                    <h2 id="cardTitle" class="text-xl md:text-2xl font-extrabold text-gray-800">OSM Feature Details</h2>
-                    <p id="cardRefNum" class="text-sm text-indigo-500 font-medium mt-1"></p>
+                    <label for="latitudeInput" class="block text-sm font-medium text-gray-700">Latitude</label>
+                    <input type="number" id="latitudeInput" placeholder="e.g., 35.78" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-indigo-500 focus:border-indigo-500">
                 </div>
-                <button onclick="closeCard()" class="text-gray-400 hover:text-gray-600 transition">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                <div>
+                    <label for="longitudeInput" class="block text-sm font-medium text-gray-700">Longitude</label>
+                    <input type="number" id="longitudeInput" placeholder="e.g., -78.64" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <button onclick="setDestination()" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 rounded-lg transition duration-150 ease-in-out">
+                    Set Destination
                 </button>
             </div>
-            
-            <!-- Card Body -->
-            <div class="p-5 max-h-[70vh] overflow-y-auto">
-                <div id="cardContent" class="space-y-6">
-                    
-                    <!-- Official Data Section -->
-                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                        <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">OpenStreetMap Tags</h3>
-                        <div class="grid grid-cols-1 gap-y-4" id="dataTags">
-                            <!-- Tags will be injected here -->
-                        </div>
-                    </div>
-
-                    <div class="text-center">
-                         <a id="osmLink" href="#" target="_blank" class="inline-flex items-center justify-center w-full px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition">
-                            View on OpenStreetMap
-                            <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
-                        </a>
-                        <p class="text-xs text-gray-400 mt-2">Opens the OpenStreetMap details for this feature.</p>
-                    </div>
-                </div>
+        </div>
+        
+        <!-- Navigation Display -->
+        <div class="bg-indigo-100 p-6 rounded-xl shadow-inner border-t-4 border-indigo-500">
+            <h2 class="text-xl font-bold text-indigo-800 mb-4">Navigation Status</h2>
+            <div id="navigation-display" class="text-gray-600 space-y-2">
+                <p>Destination: <span id="dest-coords" class="font-semibold text-indigo-600">Not Set</span></p>
+                <p>Distance to Destination: <span id="distance-display" class="font-semibold">N/A</span></p>
+                <p>Time Remaining (Est.): <span id="time-display" class="font-semibold">N/A</span></p>
             </div>
         </div>
-    </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        <!-- Message/Error Box -->
+        <div id="message-box" class="fixed bottom-4 right-4 p-3 rounded-lg shadow-xl hidden transition-opacity duration-300 bg-red-100 border-l-4 border-red-500 text-red-700 text-sm"></div>
 
-        // Global variables provided by the environment
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+    </main>
 
-        let app, db, auth;
-        let userId = null;
+    <script>
+        // Global variables for destination and position
+        let currentPosition = null;
+        let destination = null;
+        let watchId = null;
 
-        // Configuration 
-        const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6Ijg1ZWRmZjY2Y2VkZTRkOWVhMmI4NDliNTMxOThhYTY0IiwiaCI6Im11cm11cjY0In0="; 
-        const ORS_URL_BASE = "https://api.openrouteservice.org/v2/directions";
-        const ORS_PROFILE = "foot-walking";
-        const PROXIMITY_THRESHOLD_METERS = 30; // 30 meters is a good arrival threshold
-        
-        // App State
-        let map = null;
-        let currentHeading = 0; 
-        let currentLat = 38.8893; 
-        let currentLng = -77.0502;
-        let currentLocationName = "Washington D.C.";
-        let currentRadiusMiles = 10; 
-        let markersLayerGroup = null;
-        let routeLayerGroup = null;
-        let userLocationMarker = null; 
-        let searchRadiusCircle = null; 
-        const MILES_TO_METERS = 1609.34; 
-        const MILES_TO_KM = 1.60934;
-        
-        const landmarksStore = {};
-        let isCompassInitialized = false; 
-        
-        // --- TOUR STATE ---
-        let isTourActive = false;
-        let tourPoints = []; // The list of landmark objects to visit in order
-        let currentSegmentIndex = -1; // Index of the segment (route between two stops) we are currently navigating.
-        let geoWatchId = null; // ID for navigator.geolocation.watchPosition
-        let tourPolyline = null; // Reference to the displayed overall route line
-        let currentTargetMarker = null; // Marker for the next target landmark
-        let initialUserLocationSet = false; // Flag to track if we've successfully got a GPS fix
-        
-        // Instruction State for the CURRENT segment (e.g., from Stop 1 to Stop 2)
-        let currentSegmentInstructions = []; // Array of detailed turn-by-turn instructions for the current leg
-        let currentInstructionIndex = -1; // Index of the turn-by-turn instruction the user is currently following
+        // --- Utility Functions ---
 
-        // --- FIREBASE SETUP ---
-        function initializeFirebase() {
-            if (Object.keys(firebaseConfig).length > 0) {
-                app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                onAuthStateChanged(auth, async (user) => {
-                    if (!user) {
-                        try {
-                            if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken);
-                            else await signInAnonymously(auth);
-                        } catch (e) { console.error(e); }
-                    }
-                });
-            }
+        /**
+         * Converts numeric heading (0-360) to 8-point cardinal abbreviation.
+         * @param {number} heading - The current heading in degrees.
+         * @returns {string} - The abbreviation (N, NE, E, SE, S, SW, W, NW).
+         */
+        function getDirectionAbbreviation(heading) {
+            if (heading === null || heading === undefined) return 'N/A';
+            // Round to the nearest 45 degree sector (45 / 2 = 22.5)
+            const index = Math.round(heading / 45) % 8; 
+            const cardinalDirections = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+            return cardinalDirections[index];
         }
 
-        // --- CUSTOM MESSAGE BOX ---
-        function showMessageBox(title, message, isError = false) {
-            const box = document.getElementById('messageBox');
-            document.getElementById('messageTitle').textContent = title;
-            document.getElementById('messageText').textContent = message;
-            box.classList.add('visible');
-            if (isError) {
-                document.getElementById('messageTitle').classList.add('text-red-600');
-            } else {
-                document.getElementById('messageTitle').classList.remove('text-red-600');
-            }
-        }
-
-        // --- GEOLOCATION & ORIENTATION UTILS ---
-
-        function updateStatus(msg, isError = false, isContinuous = false, targetId = 'locationStatus') {
-            const el = document.getElementById(targetId);
-            if (!el) return;
-
-            const isLocationStatus = targetId === 'locationStatus';
-
-            if (isLocationStatus) {
-                const text = document.getElementById('locationStatusText');
-                const dot = el.querySelector('div');
-                text.textContent = msg;
-
-                if (isError) {
-                    dot.classList.remove('bg-green-500', 'animate-pulse');
-                    dot.classList.add('bg-red-500');
-                } else {
-                    dot.classList.remove('bg-red-500');
-                    dot.classList.add('bg-green-500', 'animate-pulse');
-                }
-
-                el.classList.remove('opacity-0', 'pointer-events-none');
-                if (!isContinuous) {
-                    setTimeout(() => { el.classList.add('opacity-0', 'pointer-events-none'); }, 4000);
-                }
-            } else { 
-                console.log(`Tour Status: ${msg}`);
-            }
-        }
-        
-        function updateMarkerRotation(heading) {
-            if (userLocationMarker) {
-                const markerElement = userLocationMarker.getElement();
-                const svg = markerElement ? markerElement.querySelector('svg') : null;
-                
-                if (svg) {
-                    // Apply rotation. heading is 0-360.
-                    // Leaflet/CSS handles the transformation
-                    svg.style.transform = `rotate(${heading}deg)`;
-                }
-            }
-        }
-        
-        function addUserMarker() {
-            if (!map) return;
-            if (userLocationMarker) map.removeLayer(userLocationMarker);
-            
-            // Custom Arrow Icon HTML (filled triangle pointing up)
-            const arrowSVG = `
-                <div style="background-color: white; border-radius: 50%; padding: 5px; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
-                    <svg viewBox="0 0 100 100" fill="#4f46e5" class="w-full h-full" style="width: 20px; height: 20px; transition: transform 0.1s ease-out; transform: rotate(${currentHeading}deg);">
-                        <path d="M50 10 L 90 90 L 10 90 Z" />
-                    </svg>
-                </div>
-            `;
-
-            const userIcon = window.L.divIcon({
-                className: 'user-arrow-marker',
-                iconSize: [40, 40], 
-                iconAnchor: [20, 20], 
-                html: arrowSVG
-            });
-            
-            userLocationMarker = window.L.marker([currentLat, currentLng], {
-                icon: userIcon,
-                zIndexOffset: 1000 
-            }).addTo(map)
-              .bindPopup(isTourActive ? 'Your current GPS location' : `${currentLocationName} (Center)`);
-            
-            updateMarkerRotation(currentHeading);
-        }
-        
-        function startOrientationTracking() {
-            if (isCompassInitialized) return;
-
-            if (window.DeviceOrientationEvent) {
-                window.addEventListener('deviceorientation', (event) => {
-                    let heading = null;
-                    
-                    if (event.webkitCompassHeading !== undefined) {
-                        // iOS specific
-                        heading = event.webkitCompassHeading; 
-                    } else if (event.alpha !== null) {
-                        // Standard W3C (360 - alpha for North reference)
-                        heading = 360 - event.alpha;
-                    }
-
-                    if (heading !== null) { 
-                        // Only update if change is significant to avoid jitter
-                        if (Math.abs(heading - currentHeading) > 1) { 
-                            currentHeading = heading;
-                            updateStatus(`Loc: (${currentLat.toFixed(4)}, ${currentLng.toFixed(4)}) | Heading: ${currentHeading.toFixed(0)}°`, false, true); 
-                            updateMarkerRotation(currentHeading);
-                        }
-                    }
-                }, false);
-                isCompassInitialized = true;
-                document.getElementById('compassPermissionButton').classList.add('hidden');
-                updateStatus("Compass is now enabled.", false, true);
-            } else {
-                console.warn("DeviceOrientationEvent not supported. Heading arrow rotation disabled.");
-                showMessageBox("Compass Warning", "DeviceOrientationEvent not supported. The user location arrow will not rotate with your physical heading.", true);
-                document.getElementById('compassPermissionButton').classList.add('hidden');
-            }
-        }
-
-        async function requestCompassPermission() {
-            const button = document.getElementById('compassPermissionButton');
-            button.disabled = true;
-            
-            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try {
-                    const permissionState = await DeviceOrientationEvent.requestPermission();
-                    if (permissionState === 'granted') {
-                        startOrientationTracking();
-                    } else {
-                        showMessageBox("Permission Denied", "Compass feature requires device orientation permission.", true);
-                        button.disabled = false;
-                    }
-                } catch (error) {
-                    console.error("Device orientation permission error:", error);
-                    showMessageBox("Permission Error", "Could not request device orientation permission.", true);
-                    button.disabled = false;
-                }
-            } else {
-                // For non-iOS/standard browsers, just attempt to start
-                startOrientationTracking();
-            }
-        }
-
-        function startPermissionCheck() {
-            const button = document.getElementById('compassPermissionButton');
-            
-            // Check if permission request is required (usually on iOS 13+ in secure contexts)
-            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                button.classList.remove('hidden');
-                button.addEventListener('click', requestCompassPermission);
-                updateStatus("Tap 'Enable Compass' to see your heading.", false, true);
-            } else {
-                // Otherwise, try to start tracking directly
-                button.classList.add('hidden');
-                startOrientationTracking();
-            }
-        }
-
-        // --- Core Geolocation Logic ---
-        function getUserLocation() {
-            // ... (getUserLocation logic remains the same) ...
-            if (!navigator.geolocation) {
-                updateStatus(`Geolocation not supported. Showing default location: ${currentLocationName}.`, true);
-                if (map) fetchNearbyLandmarks(); 
-                return;
-            }
-            
-            updateStatus("Finding actual location...");
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    currentLat = position.coords.latitude;
-                    currentLng = position.coords.longitude;
-                    currentLocationName = "Your GPS Location";
-                    initialUserLocationSet = true;
-                    updateStatus("Location found!");
-                    
-                    if (map) {
-                        map.setView([currentLat, currentLng], 14);
-                        addUserMarker(); 
-                        fetchNearbyLandmarks();
-                    }
-                },
-                (error) => {
-                    console.error("Location error:", error);
-                    updateStatus(`Location denied. Using Default: ${currentLocationName}.`, true);
-                    if (map) fetchNearbyLandmarks(); 
-                },
-                { enableHighAccuracy: true, timeout: 10000 }
-            );
-        }
-
-        // Function to manually change the map's center
-        window.changeLocation = function(lat, lng, name) {
-            stopTour(); 
-            currentLat = lat;
-            currentLng = lng;
-            currentLocationName = name;
-            
-            if (routeLayerGroup) routeLayerGroup.clearLayers();
-            
-            if (map) {
-                map.setView([currentLat, currentLng], 14);
-                fetchNearbyLandmarks();
-                updateStatus(`Location changed to ${name}.`, false);
-            } else {
-                 updateStatus(`Location changed to ${name}, initializing map...`, false);
-            }
-        }
-        
-        function getBoundingBox(lat, lng, radiusMiles) {
-            // ... (getBoundingBox logic remains the same) ...
-            const latChange = radiusMiles / 69.0;
-            const lngChange = radiusMiles / (69.0 * Math.cos(lat * Math.PI / 180));
-            const precision = 4; 
-            return {
-                xmin: (lng - lngChange).toFixed(precision), 
-                ymin: (lat - latChange).toFixed(precision), 
-                xmax: (lng + lngChange).toFixed(precision), 
-                ymax: (lat + latChange).toFixed(precision)
-            };
-        }
-
-        async function fetchNearbyLandmarks() {
-            // ... (fetchNearbyLandmarks logic remains the same) ...
-            if (!map) return;
-            
-            console.log(`DEBUG: Starting search at Lat: ${currentLat}, Lng: ${currentLng} with Radius: ${currentRadiusMiles} miles.`);
-
-            const radiusMeters = currentRadiusMiles * MILES_TO_METERS;
-            if (searchRadiusCircle) {
-                searchRadiusCircle.setLatLng([currentLat, currentLng]).setRadius(radiusMeters);
-            } else {
-                searchRadiusCircle = window.L.circle([currentLat, currentLng], {
-                    color: 'indigo',
-                    fillColor: '#818cf8',
-                    fillOpacity: 0.1,
-                    radius: radiusMeters
-                }).addTo(map);
-            }
-            
-            addUserMarker();
-
-            updateStatus(`Searching within ${currentRadiusMiles} mile(s) of ${currentLocationName}...`);
-
-            const bbox = getBoundingBox(currentLat, currentLng, currentRadiusMiles);
-            const overpassBbox = `${bbox.ymin},${bbox.xmin},${bbox.ymax},${bbox.xmax}`;
-            const baseUrl = "https://overpass-api.de/api/interpreter";
-            
-            const overpassQuery = `
-[out:json][timeout:25];
-(
-  node[historic](${overpassBbox});
-  way[historic](${overpassBbox});
-  rel[historic](${overpassBbox});
-);
-out center;
-`;
-
-            try {
-                const response = await fetch(baseUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `data=${encodeURIComponent(overpassQuery)}`
-                });
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`Overpass API request failed with status ${response.status}. Response: ${errorText.substring(0, 100)}...`);
-                }
-                
-                const data = await response.json();
-                
-                if (data.elements && data.elements.length > 0) {
-                    displayLandmarks(data.elements);
-                    updateStatus(`Found ${data.elements.length} historic sites near ${currentLocationName}`);
-                } else {
-                    updateStatus(`No historic sites found nearby in OpenStreetMap for ${currentLocationName}`, true);
-                    if (markersLayerGroup) markersLayerGroup.clearLayers();
-                }
-            } catch (error) {
-                console.error("General Error fetching landmarks:", error);
-                updateStatus(`Error connecting to OpenStreetMap: ${error.message.substring(0, 50)}...`, true);
-            }
-        }
-
-        function displayLandmarks(elements) {
-            // ... (displayLandmarks logic remains the same) ...
-            if (!map) return;
-            
-            if (!markersLayerGroup) {
-                markersLayerGroup = window.L.layerGroup().addTo(map);
-            } else {
-                markersLayerGroup.clearLayers();
-            }
-            
-            for (const key in landmarksStore) {
-                if (landmarksStore.hasOwnProperty(key)) {
-                    delete landmarksStore[key];
-                }
-            }
-
-            elements.forEach(element => {
-                const lat = element.lat; 
-                const lng = element.lon; 
-                const tags = element.tags || {};
-                
-                if (typeof lat === 'undefined' || typeof lng === 'undefined') return;
-
-                const id = `${element.type}-${element.id}`;
-                
-                const dLat = (lat - currentLat) * 69.0;
-                const dLng = (lng - currentLng) * (69.0 * Math.cos(currentLat * Math.PI / 180));
-                const distanceMiles = Math.sqrt(dLat * dLat + dLng * dLng);
-
-                landmarksStore[id] = { ...element, distanceMiles };
-
-                const name = tags.name || tags.historic || `${element.type} ${element.id}`;
-
-                const marker = window.L.marker([lat, lng]) 
-                    .bindPopup(
-                        `<div class="text-center p-2">
-                            <h4 class="font-bold text-indigo-700 mb-2 text-sm">${name}</h4>
-                            <p class="text-xs text-gray-500 mb-2">Distance: ${distanceMiles.toFixed(2)} mi</p>
-                            <button class="block w-full text-xs text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-2 rounded shadow transition font-medium" 
-                                onclick="openCard('${id}')">
-                                View Details
-                            </button>
-                        </div>`
-                    );
-                
-                markersLayerGroup.addLayer(marker);
-            });
-        }
-
-        // --- TOUR LOGIC & NAVIGATION ---
-
-        // Haversine formula to calculate distance between two lat/lng points in meters
+        /**
+         * Calculates the distance between two geographical points using the Haversine formula.
+         * @param {number} lat1, lon1 - Coordinates of point 1 (current).
+         * @param {number} lat2, lon2 - Coordinates of point 2 (destination).
+         * @returns {number} Distance in kilometers.
+         */
         function calculateDistance(lat1, lon1, lat2, lon2) {
-            // ... (calculateDistance logic remains the same) ...
-            const R = 6371000; // Radius of Earth in meters
+            const R = 6371; // Radius of Earth in kilometers
             const dLat = (lat2 - lat1) * (Math.PI / 180);
             const dLon = (lon2 - lon1) * (Math.PI / 180);
-            const a = 
+            const a =
                 Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return R * c; // Distance in meters
+            return R * c; // Distance in km
         }
 
-        // Success callback for navigator.geolocation.watchPosition
-        function watchPositionSuccess(position) {
-            currentLat = position.coords.latitude;
-            currentLng = position.coords.longitude;
+        // --- UI Logic ---
 
-            // 1. Update User Marker location and center map
-            if (userLocationMarker) {
-                userLocationMarker.setLatLng([currentLat, currentLng]);
-                // Only pan the map if the user is in an active tour segment
-                if (isTourActive) {
-                    map.setView([currentLat, currentLng], 18, {animate: true, duration: 0.5});
-                }
+        function showMessage(message, isError = false) {
+            const box = document.getElementById('message-box');
+            box.textContent = message;
+            box.className = `fixed bottom-4 right-4 p-3 rounded-lg shadow-xl transition-opacity duration-300 text-sm ${
+                isError ? 'bg-red-100 border-l-4 border-red-500 text-red-700' : 'bg-green-100 border-l-4 border-green-500 text-green-700'
+            }`;
+            box.style.display = 'block';
+            setTimeout(() => {
+                box.style.display = 'none';
+            }, 5000);
+        }
+
+        function toggleQuickChange() {
+            const content = document.getElementById('quick-change-content');
+            const icon = document.getElementById('dropdown-icon');
+            const isVisible = content.classList.contains('hidden');
+
+            if (isVisible) {
+                content.classList.remove('hidden');
+                icon.style.transform = 'rotate(180deg)';
             } else {
-                addUserMarker();
-            }
-
-            // 2. Navigation State Update and Proximity Check
-            if (isTourActive && currentSegmentIndex < tourPoints.length) {
-                const target = tourPoints[currentSegmentIndex];
-                const distanceToTarget = calculateDistance(currentLat, currentLng, target.lat, target.lon);
-                
-                // Get the current turn instruction for display
-                const currentInstruction = currentSegmentInstructions[currentInstructionIndex];
-                
-                // --- Instruction Update Logic ---
-                let instructionText = "Getting directions...";
-                let nextInstructionText = "Calculating next step...";
-                let distanceToNextManeuver = 0; // Distance to the end of the current instruction segment
-                
-                // The current instruction is the one we are *working on*
-                if (currentInstruction) {
-                    const instructionDistance = currentInstruction.distance; 
-                    const instructionCoordinates = currentInstruction.start_coords; // The starting point of the instruction's segment
-                    
-                    // The distance remaining in the current instruction's segment
-                    const distanceSinceStart = calculateDistance(currentLat, currentLng, instructionCoordinates[1], instructionCoordinates[0]);
-                    distanceToNextManeuver = instructionDistance - distanceSinceStart;
-
-                    // Clamp to 0 and format: "In [X] meters, [Action]"
-                    const remainingMeters = Math.max(0, distanceToNextManeuver).toFixed(0);
-                    const instructionAction = currentInstruction.text;
-                    instructionText = `In ${remainingMeters} meters: ${instructionAction}`;
-                    
-                    // Next instruction hint
-                    const nextInstruction = currentSegmentInstructions[currentInstructionIndex + 1];
-                    if (nextInstruction) {
-                         nextInstructionText = `Next: ${nextInstruction.text.substring(0, 50)}`;
-                    } else {
-                        nextInstructionText = `Approaching final stop: ${target.tags.name || "Landmark"}`;
-                    }
-                    
-                    // Update UI elements
-                    document.getElementById('currentNavInstruction').textContent = instructionText;
-                    document.getElementById('nextLandmarkInfo').textContent = nextInstructionText;
-                }
-
-                // --- Instruction Segment Advance Logic ---
-                // If user has passed the point of the current maneuver (distance remaining is ~0 or negative)
-                if (distanceToNextManeuver < 10 && currentInstructionIndex < currentSegmentInstructions.length - 1) {
-                    currentInstructionIndex++;
-                    updateNavigationPanelUI(distanceToTarget.toFixed(0)); // Recalculate instruction display
-                }
-
-                // --- Proximity Check (Arrival at Landmark) ---
-                if (distanceToTarget <= PROXIMITY_THRESHOLD_METERS) {
-                    // 1. Update instruction to ARRIVE
-                    document.getElementById('currentNavInstruction').textContent = `ARRIVED: You have reached ${target.tags.name || 'the landmark'}!`;
-                    document.getElementById('nextLandmarkInfo').textContent = "Tap 'Next Landmark' to calculate the route to the next stop.";
-                    
-                    // 2. Enable the action button to proceed to the next segment
-                    document.getElementById('navActionButton').textContent = `Next Landmark (${currentSegmentIndex + 1}/${tourPoints.length})`;
-                    document.getElementById('navActionButton').disabled = false;
-                    
-                    // Remove target marker when arrived (optional: could keep until moved to next segment)
-                    if (currentTargetMarker) map.removeLayer(currentTargetMarker);
-                    currentTargetMarker = null;
-
-                } else {
-                    // Re-disable the button and update distance if outside proximity
-                    document.getElementById('navActionButton').textContent = `Next Landmark (Wait for Arrival - ${distanceToTarget.toFixed(0)}m)`;
-                    document.getElementById('navActionButton').disabled = true; 
-                }
-                
-                // Always update the overall step counter
-                document.getElementById('navStepCounter').textContent = `Stop ${currentSegmentIndex + 1}/${tourPoints.length}`;
-
+                content.classList.add('hidden');
+                icon.style.transform = 'rotate(0deg)';
             }
         }
 
-        // Error callback for navigator.geolocation.watchPosition
-        function watchPositionError(error) {
-            // ... (watchPositionError logic remains the same) ...
-            console.error("Watch Position Error:", error);
-            if (isTourActive) {
-                 document.getElementById('currentNavInstruction').textContent = "ERROR: GPS signal lost or denied. Check your device settings.";
-            } else {
-                updateStatus("GPS Error: Could not get precise location.", true, true);
-            }
-        }
-        
-        // --- Panel Control ---
-        function showNavigationPanel() {
-            const panel = document.getElementById('navigationPanel');
-            panel.classList.remove('translate-y-full', 'opacity-0');
-            panel.classList.add('translate-y-0', 'opacity-100');
-        }
-        function hideNavigationPanel() {
-            const panel = document.getElementById('navigationPanel');
-            panel.classList.remove('translate-y-0', 'opacity-100');
-            panel.classList.add('translate-y-full', 'opacity-0');
-        }
+        function setDestination() {
+            const lat = parseFloat(document.getElementById('latitudeInput').value);
+            const lon = parseFloat(document.getElementById('longitudeInput').value);
 
-        // Updates the instructions shown in the green bar
-        function updateNavigationPanelUI() {
-            // This function is mostly handled by watchPositionSuccess now for real-time distance updates
-            // It still handles the final arrival/completion state.
-            if (currentSegmentIndex >= tourPoints.length) {
-                document.getElementById('currentNavInstruction').textContent = "Tour Complete! You have arrived at the final destination.";
-                document.getElementById('nextLandmarkInfo').textContent = "Enjoy your visit!";
-                document.getElementById('navStepCounter').textContent = `${tourPoints.length}/${tourPoints.length}`;
-                document.getElementById('navActionButton').textContent = "End Tour";
-                document.getElementById('navActionButton').disabled = false;
-            }
-        }
-        
-        // Advances to the next landmark segment
-        window.nextSegment = async function() {
-            currentSegmentIndex++; // Move to the next landmark target
-
-            if (currentSegmentIndex < tourPoints.length) {
-                const currentTarget = tourPoints[currentSegmentIndex];
-                const targetName = currentTarget.tags.name || "Landmark";
-
-                // 1. Calculate the new route segment and get instructions
-                updateStatus(`Calculating route to ${targetName}...`);
-                document.getElementById('navActionButton').disabled = true;
-                
-                try {
-                    const instructionsResult = await getOrsInstructions(currentLat, currentLng, currentTarget.lat, currentTarget.lon);
-                    currentSegmentInstructions = instructionsResult.instructions;
-                    
-                    if (currentSegmentInstructions.length === 0) {
-                         throw new Error("Route calculated but no turn-by-turn instructions were returned.");
-                    }
-
-                    currentInstructionIndex = 0; // Start at the first instruction of the new segment
-                    
-                    setNextTargetMarker(); // Update the red marker on the map
-                    updateNavigationPanelUI();
-                    
-                    updateStatus(`Moving to stop ${currentSegmentIndex + 1}/${tourPoints.length}. Follow the directions in the green bar.`, false);
-                    
-                    // The button will be re-enabled automatically upon proximity check in watchPositionSuccess
-                    document.getElementById('navActionButton').textContent = 'Next Landmark (Wait for Arrival)';
-
-                } catch (error) {
-                    console.error("Error calculating next segment instructions:", error);
-                    showMessageBox("Route Error", `Could not get directions to ${targetName}. Ending tour. Check console for details.`, true);
-                    stopTour();
-                }
-
-            } else {
-                stopTour("Tour complete! Thank you for exploring.");
-            }
-        }
-
-
-        // Starts the continuous GPS tracking and centers map on the user
-        window.startTour = function() {
-            if (tourPoints.length === 0) {
-                 updateStatus("Please create a tour first (click 'Start Tour' button and then 'Create').", true);
-                 return;
-            }
-            if (!initialUserLocationSet) {
-                 getUserLocation();
-                 if (!initialUserLocationSet) {
-                    updateStatus("GPS fix needed. Trying to get location...", true);
-                    return;
-                 }
-            }
-
-            if (isTourActive) return; 
-            isTourActive = true;
-
-            // 1. Zoom In and Focus
-            map.setView([currentLat, currentLng], 18, {animate: true});
-
-            // 2. Start Continuous GPS Tracking
-            geoWatchId = navigator.geolocation.watchPosition(
-                watchPositionSuccess, 
-                watchPositionError, 
-                { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-            );
-
-            // 3. Update UI
-            document.getElementById('startTourButton').textContent = 'End Tour';
-            document.getElementById('startTourButton').onclick = stopTour;
-
-            // Show the navigation panel
-            showNavigationPanel();
-            
-            // Start the first segment calculation
-            currentSegmentIndex = -1; // Set to -1 so nextSegment starts at 0
-            nextSegment();
-
-            // Hide the configuration panel
-            document.getElementById('tourPanel').classList.add('hidden');
-            document.getElementById('navActionButton').onclick = nextSegment;
-        }
-
-        // Stops the tour and resets state
-        window.stopTour = function(finalMessage = "Tour ended.") {
-            if (geoWatchId !== null) {
-                navigator.geolocation.clearWatch(geoWatchId);
-                geoWatchId = null;
-            }
-
-            isTourActive = false;
-            currentSegmentIndex = -1;
-            currentSegmentInstructions = [];
-            currentInstructionIndex = -1;
-            
-            // Reset UI
-            document.getElementById('startTourButton').textContent = 'Start Tour';
-            document.getElementById('startTourButton').onclick = openTourPanel;
-            hideNavigationPanel();
-
-            if (currentTargetMarker) map.removeLayer(currentTargetMarker);
-            currentTargetMarker = null;
-
-            if (tourPolyline) tourPolyline.setStyle({color: '#a5b4fc', weight: 3, opacity: 0.5}); // Dim the route line
-            
-            updateStatus(finalMessage, finalMessage.includes("complete") ? false : true);
-            map.setView([currentLat, currentLng], 14, {animate: true}); // Zoom out
-        }
-
-        // Sets the marker for the next target landmark
-        function setNextTargetMarker() {
-            // ... (setNextTargetMarker logic remains the same) ...
-            if (currentTargetMarker) map.removeLayer(currentTargetMarker);
-            
-            if (currentSegmentIndex < tourPoints.length) {
-                const nextTarget = tourPoints[currentSegmentIndex];
-                
-                const targetIcon = window.L.icon({
-                    iconUrl: 'https://cdn.rawgit.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-                    iconSize: [25, 41],
-                    iconAnchor: [12, 41],
-                    popupAnchor: [1, -34],
-                    shadowSize: [41, 41]
-                });
-
-                currentTargetMarker = window.L.marker([nextTarget.lat, nextTarget.lon], {icon: targetIcon, zIndexOffset: 2000})
-                    .addTo(map)
-                    .bindPopup(`Next Stop: ${nextTarget.tags.name || 'Landmark'}`);
-            }
-        }
-        
-        // --- ROUTE & INSTRUCTION FETCHING ---
-        
-        // Fetches detailed step-by-step instructions for a single segment (A to B)
-        async function getOrsInstructions(startLat, startLng, endLat, endLng) {
-             const routeCoords = [
-                [startLng, startLat], 
-                [endLng, endLat]
-            ];
-
-            const orsPayload = {
-                coordinates: routeCoords,
-                instructions: true, // Crucial for getting step-by-step directions
-                preference: "fastest"
-            };
-            
-            const orsUrlWithKey = `${ORS_URL_BASE}/${ORS_PROFILE}/geojson?api_key=${ORS_API_KEY}`;
-
-            const maxRetries = 3;
-            let attempt = 0;
-            
-            while (attempt < maxRetries) {
-                attempt++;
-                try {
-                    const response = await fetch(orsUrlWithKey, {
-                        method: 'POST',
-                        headers: {
-                            'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8', 
-                            'Content-Type': 'application/json; charset=utf-8',
-                        },
-                        body: JSON.stringify(orsPayload)
-                    });
-
-                    if (response.ok) {
-                        const geoJson = await response.json();
-                        const routeSummary = geoJson.features[0].properties.segments?.[0];
-                        if (!routeSummary || !routeSummary.steps) {
-                            throw new Error("ORS returned route but missing steps/instructions.");
-                        }
-                        
-                        // Extract steps: text, distance, and coordinates of the maneuver point
-                        const instructions = routeSummary.steps.map(step => ({
-                            text: step.instruction,
-                            distance: step.distance, // in meters
-                            duration: step.duration, // in seconds
-                            // Coordinates of the *start* of the maneuver segment for tracking progress
-                            start_coords: geoJson.features[0].geometry.coordinates[step.way_points[0]] 
-                        }));
-
-                        return { instructions };
-                    }
-                    
-                    if (response.status === 429 && attempt < maxRetries) {
-                        const delay = Math.pow(2, attempt) * 1000;
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                        continue;
-                    }
-
-                    if (!response.ok) {
-                        let errorText = await response.text();
-                        try {
-                            const errorJson = JSON.parse(errorText);
-                            const errorMessage = errorJson.error?.message || `ORS API failed with status ${response.status}`;
-                            throw new Error(errorMessage);
-                        } catch (e) {
-                            throw new Error(`ORS API failed (${response.status}): ${errorText.substring(0, 100)}...`);
-                        }
-                    }
-                } catch (error) {
-                    if (attempt === maxRetries) throw error;
-                    const delay = Math.pow(2, attempt) * 1000;
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                }
-            }
-            throw new Error("Failed to get a successful response from ORS API after retries.");
-        }
-
-
-        async function getOrsRouteDistance(coords) {
-            // ... (getOrsRouteDistance logic remains the same, used for initial tour path calculation) ...
-            const routeCoords = [
-                [currentLng, currentLat], 
-                ...coords.map(c => [c.lon, c.lat]), 
-                [currentLng, currentLat] 
-            ];
-
-            const orsPayload = {
-                coordinates: routeCoords,
-                // Do not request instructions for the complex multi-stop calculation to save payload size
-            };
-            
-            const orsUrlWithKey = `${ORS_URL_BASE}/${ORS_PROFILE}/geojson?api_key=${ORS_API_KEY}`;
-
-            const maxRetries = 3;
-            let attempt = 0;
-            let response;
-            let geoJson = null;
-
-            while (attempt < maxRetries) {
-                attempt++;
-                try {
-                    response = await fetch(orsUrlWithKey, {
-                        method: 'POST',
-                        headers: {
-                            'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8', 
-                            'Content-Type': 'application/json; charset=utf-8',
-                        },
-                        body: JSON.stringify(orsPayload)
-                    });
-
-                    if (response.ok) {
-                        geoJson = await response.json();
-                        return { 
-                            distanceMiles: geoJson.features[0].properties.summary.distance / 1000 / MILES_TO_KM,
-                            geoJson: geoJson 
-                        };
-                    }
-                    
-                    if (response.status === 429 && attempt < maxRetries) {
-                        const delay = Math.pow(2, attempt) * 1000;
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                        continue;
-                    }
-
-                    if (!response.ok) {
-                        let errorText = await response.text();
-                        try {
-                            const errorJson = JSON.parse(errorText);
-                            const errorMessage = errorJson.error?.message || `ORS API failed with status ${response.status}`;
-                            throw new Error(errorMessage);
-                        } catch (e) {
-                            throw new Error(`ORS API failed (${response.status}): ${errorText.substring(0, 100)}...`);
-                        }
-                    }
-                } catch (error) {
-                    if (attempt === maxRetries) throw error;
-                    const delay = Math.pow(2, attempt) * 1000;
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                }
-            }
-            throw new Error("Failed to get a successful response from ORS API after retries.");
-        }
-
-
-        window.createTour = async function(shouldStartImmediately = false) {
-            // ... (createTour logic remains the same) ...
-            const desiredDistanceMiles = parseFloat(document.getElementById('tourDistance').value);
-            if (isNaN(desiredDistanceMiles) || desiredDistanceMiles <= 0) {
-                updateStatus("Please enter a valid distance.", true);
+            if (isNaN(lat) || isNaN(lon)) {
+                showMessage("Please enter valid latitude and longitude values.", true);
                 return;
             }
 
-            updateStatus("Selecting pins and calculating route distance...");
-            
-            const allLandmarks = Object.values(landmarksStore);
-            if (allLandmarks.length === 0) {
-                 updateStatus("No landmarks found. Please ensure the map has pins before starting a tour.", true);
-                 return;
-            }
+            destination = { lat, lon };
+            document.getElementById('dest-coords').textContent = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+            showMessage("Destination set successfully!");
+            toggleQuickChange(); // Close dropdown after setting
 
-            const sortedLandmarks = allLandmarks.sort((a, b) => a.distanceMiles - b.distanceMiles);
-
-            const MAX_STOPS = 10; 
-            let pointsToVisit = [];
-            let bestTourData = null; 
-            let routeDistanceMiles = 0;
-            
-            for (let i = 0; i < sortedLandmarks.length && i < MAX_STOPS; i++) {
-                const nextLandmark = sortedLandmarks[i];
-                const trialPoints = [...pointsToVisit, nextLandmark];
-
-                updateStatus(`Calculating route with ${trialPoints.length} stops...`);
-
-                try {
-                    const tourResult = await getOrsRouteDistance(trialPoints);
-                    const trialDistance = tourResult.distanceMiles;
-                    
-                    if (trialDistance > desiredDistanceMiles) {
-                        if (bestTourData) {
-                             routeDistanceMiles = bestTourData.distanceMiles;
-                             break; 
-                        } else {
-                            routeDistanceMiles = trialDistance;
-                            bestTourData = tourResult;
-                            updateStatus(`Even the closest landmark creates a ${trialDistance.toFixed(2)} mile loop, which exceeds your ${desiredDistanceMiles} mile limit.`, true);
-                            pointsToVisit = trialPoints;
-                            break; 
-                        }
-                    } else {
-                        pointsToVisit = trialPoints;
-                        bestTourData = tourResult;
-                        routeDistanceMiles = trialDistance;
-
-                        if (i === sortedLandmarks.length - 1 || i === MAX_STOPS - 1) {
-                            break;
-                        }
-                    }
-                } catch (error) {
-                    console.error("Single ORS calculation error, stopping tour build:", error);
-                    if (bestTourData) {
-                        updateStatus(`Could not calculate next step due to API error. Showing best route found: ${routeDistanceMiles.toFixed(2)} miles.`, true);
-                        break;
-                    } else {
-                        updateStatus(`Error generating tour: ${error.message.substring(0, 50)}...`, true);
-                        return;
-                    }
-                }
-            }
-
-
-            if (!bestTourData) {
-                updateStatus(`No route could be calculated. Ensure you have landmarks nearby and increase the max distance.`, true);
-                return;
-            }
-
-            // 1. Set global tour points
-            tourPoints = pointsToVisit;
-            const geoJson = bestTourData.geoJson;
-
-            // 2. Display the route
-            if (routeLayerGroup) routeLayerGroup.clearLayers();
-            tourPolyline = window.L.geoJSON(geoJson.features[0], {
-                style: {
-                    color: '#a5b4fc', 
-                    weight: 3,
-                    opacity: 0.5
-                },
-                onEachFeature: function(feature, layer) {
-                    layer.bindPopup(`Planned Tour Distance: ${routeDistanceMiles.toFixed(2)} miles.<br>Stops: ${tourPoints.length} landmarks.`);
-                }
-            }).addTo(map);
-            routeLayerGroup.addLayer(tourPolyline);
-            
-            // 3. Update the Tour Button State
-            document.getElementById('tourPanel').classList.add('hidden');
-            document.getElementById('startTourButton').textContent = `Start Tour (${tourPoints.length} Stops)`;
-            document.getElementById('startTourButton').onclick = startTour;
-
-            updateStatus(`Tour route calculated. ${tourPoints.length} stops over ${routeDistanceMiles.toFixed(2)} miles.`, false);
-
-            if (shouldStartImmediately) {
-                startTour();
+            // Immediately update navigation display with new destination
+            if (currentPosition) {
+                updateNavigationDisplay(currentPosition);
             }
         }
 
-        window.openTourPanel = function() {
-            // ... (openTourPanel logic remains the same) ...
-            const panel = document.getElementById('tourPanel');
-            panel.classList.toggle('hidden');
-            if (!panel.classList.contains('hidden')) {
-                 updateStatus("Enter your desired walking distance and click 'Create'.", false);
-            }
-        }
+        // --- Geolocation Handlers ---
 
-
-        // --- MAP INITIALIZATION ---
-
-        function initMap() {
-            if (map) return;
+        function updateLocationDisplay(position) {
+            const lat = position.coords.latitude.toFixed(4);
+            const lon = position.coords.longitude.toFixed(4);
+            // Speed in meters/sec, convert to km/h (m/s * 3.6)
+            const speed = (position.coords.speed !== null ? position.coords.speed * 3.6 : 0).toFixed(1);
+            const heading = position.coords.heading !== null ? position.coords.heading.toFixed(0) : 'N/A';
+            const directionAbbr = getDirectionAbbreviation(position.coords.heading);
             
-            if (typeof window.L === 'undefined' || !window.L.map) {
-                setTimeout(initMap, 100);
-                return;
-            }
-
-            if (!document.getElementById('map')) return;
-
-            map = window.L.map('map').setView([currentLat, currentLng], 14);
-            map.invalidateSize();
-
-            window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-                maxZoom: 19
-            }).addTo(map);
-
-            markersLayerGroup = window.L.layerGroup().addTo(map);
-            routeLayerGroup = window.L.layerGroup().addTo(map); 
+            const statusDisplay = document.getElementById('status-display');
             
-            getUserLocation();
-            startPermissionCheck(); 
-
-            setTimeout(() => map.invalidateSize(), 250);
-        }
-
-        // --- UI INTERACTIONS ---
-
-        const slider = document.getElementById('radiusSlider');
-        const radiusLabel = document.getElementById('radiusValue');
-
-        slider.addEventListener('input', (e) => {
-            currentRadiusMiles = e.target.value;
-            radiusLabel.textContent = `${currentRadiusMiles} mi`;
-        });
-
-        slider.addEventListener('change', () => {
-            fetchNearbyLandmarks();
-        });
-
-        // --- CARD LOGIC (For Pin Click) ---
-
-        window.openCard = function(id) {
-            // ... (openCard logic remains the same) ...
-            const element = landmarksStore[id];
-            if (!element) return;
-            const tags = element.tags || {};
-
-            const card = document.getElementById('detailsCard');
-            const dataTagsContainer = document.getElementById('dataTags');
-            
-            document.getElementById('cardTitle').textContent = tags.name || tags.historic || `${element.type} ${element.id}`;
-            document.getElementById('cardRefNum').textContent = `OSM ID: ${id}`;
-            
-            dataTagsContainer.innerHTML = '';
-            
-            dataTagsContainer.innerHTML += `
-                <div>
-                    <p class="text-xs text-gray-500">Type</p>
-                    <p id="dataType" class="text-sm font-semibold text-gray-800">${element.type}</p>
-                </div>
-                <div>
-                    <p class="text-xs text-gray-500">Latitude, Longitude</p>
-                    <p id="dataCoords" class="text-sm font-semibold text-gray-800">${element.lat.toFixed(6)}, ${element.lon.toFixed(6)}</p>
-                </div>
+            // Format for single-line responsive display
+            statusDisplay.innerHTML = `
+                <span class="data-point">Lat/Lon: ${lat}, ${lon}</span>
+                <span class="data-point">Speed: ${speed} kph</span>
+                <span class="data-point">Heading: ${heading}° (${directionAbbr})</span>
             `;
 
-            let tagCount = 0;
-            for (const key in tags) {
-                if (tags.hasOwnProperty(key) && tagCount < 10) {
-                     dataTagsContainer.innerHTML += `
-                        <div>
-                            <p class="text-xs text-gray-500">${key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ')}</p>
-                            <p class="text-sm font-semibold text-gray-800">${tags[key]}</p>
-                        </div>
-                    `;
-                    tagCount++;
-                }
+            currentPosition = position;
+            if (destination) {
+                updateNavigationDisplay(position);
             }
-
-            const osmLink = document.getElementById('osmLink');
-            osmLink.href = `https://www.openstreetmap.org/${element.type}/${element.id}`;
-
-            card.classList.remove('hidden');
         }
 
-        window.closeCard = function() {
-            document.getElementById('detailsCard').classList.add('hidden');
+        function updateNavigationDisplay(position) {
+            if (!destination) return;
+
+            const currentLat = position.coords.latitude;
+            const currentLon = position.coords.longitude;
+            const speedKPH = position.coords.speed !== null ? position.coords.speed * 3.6 : 10; // Use minimum 10 kph for ETA
+            
+            const distanceKM = calculateDistance(currentLat, currentLon, destination.lat, destination.lon);
+            
+            document.getElementById('distance-display').textContent = `${distanceKM.toFixed(2)} km`;
+
+            if (speedKPH > 0.5) {
+                // Time in hours * 60 minutes/hour
+                const timeInMinutes = (distanceKM / speedKPH) * 60;
+                const hours = Math.floor(timeInMinutes / 60);
+                const minutes = Math.floor(timeInMinutes % 60);
+                document.getElementById('time-display').textContent = `${hours}h ${minutes}m (Est.)`;
+            } else {
+                 document.getElementById('time-display').textContent = `Moving slow or stopped. Distance only.`;
+            }
         }
 
-        document.addEventListener('DOMContentLoaded', initializeFirebase);
-        
-        if (document.readyState === "complete" || document.readyState === "interactive") {
-            setTimeout(initMap, 100);
-        } else {
-            document.addEventListener("DOMContentLoaded", initMap);
+        function handleError(error) {
+            let message;
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    message = "Location access denied. Please enable GPS.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    message = "Location information is unavailable.";
+                    break;
+                case error.TIMEOUT:
+                    message = "The request to get user location timed out.";
+                    break;
+                default:
+                    message = "An unknown error occurred while retrieving location.";
+            }
+            showMessage(`GPS Error: ${message}`, true);
+            console.error(error);
         }
 
+        function initGeolocation() {
+            if (navigator.geolocation) {
+                // Set high accuracy and enable monitoring of heading and speed
+                const options = {
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 5000 
+                };
+                watchId = navigator.geolocation.watchPosition(updateLocationDisplay, handleError, options);
+                showMessage("GPS Tracking Started.", false);
+            } else {
+                showMessage("Geolocation is not supported by this browser.", true);
+            }
+        }
+
+        window.onload = initGeolocation;
     </script>
 </body>
 </html>
