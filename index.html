@@ -557,8 +557,6 @@ out center;
             }
 
             // 2. Sort by distance and try to select landmarks that roughly match the path length.
-            // Heuristic: We assume a round trip distance is roughly 3-4 times the distance of the furthest point in the loop.
-            // We want the maximum landmark distance (furthest point from start) to be around (desiredDistance / 3.5)
             const targetMaxLandmarkDistance = desiredDistanceMiles / 3.5;
             
             const candidateLandmarks = allLandmarks
@@ -582,10 +580,10 @@ out center;
                 coords.push([lm.lon, lm.lat]);
             });
 
-            // 4. Construct the ORS payload
+            // 4. Construct the ORS payload (Removed the redundant 'profile' key)
             const orsPayload = {
                 coordinates: coords,
-                profile: 'walking', // <-- CONFIRMED: MUST BE 'walking'
+                // Removed: profile: 'walking', <-- This is already specified in the ORS_URL constant
                 options: {
                     round_trip: { 
                         points: pointsToUse.length + 1, // Number of stops (user + landmarks)
@@ -594,6 +592,7 @@ out center;
                 }
             };
 
+            console.log("ORS Request URL:", ORS_URL);
             console.log("ORS Payload:", orsPayload);
 
 
