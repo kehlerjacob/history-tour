@@ -133,14 +133,13 @@
 
         // App State
         let map = null;
-        let currentLat = 39.8283; 
-        let currentLng = -98.5795;
+        // Default to Washington D.C. for a guaranteed populated initial view
+        let currentLat = 38.8893; 
+        let currentLng = -77.0502;
         let currentRadiusMiles = 1;
         let markersLayerGroup = null;
         let userLocationMarker = null;
         
-        // Store landmark data in memory to access when clicking markers
-        // Key: NRIS_Refnum, Value: Object properties
         const landmarksStore = {};
 
         // --- FIREBASE SETUP ---
@@ -184,6 +183,8 @@
         function getUserLocation() {
             if (!navigator.geolocation) {
                 updateStatus("Geolocation not supported", true);
+                // Still load default D.C. landmarks
+                if (map) fetchNearbyLandmarks(); 
                 return;
             }
             
@@ -202,7 +203,8 @@
                 },
                 (error) => {
                     console.error("Location error:", error);
-                    updateStatus("Location access denied. Using default.", true);
+                    updateStatus("Location access denied. Showing D.C.", true);
+                    // Fetch default location data anyway
                     if (map) fetchNearbyLandmarks(); 
                 },
                 { enableHighAccuracy: true }
@@ -245,12 +247,14 @@
             const bboxString = `${bbox.xmin},${bbox.ymin},${bbox.xmax},${bbox.ymax}`;
             const baseUrl = "https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer/0/query";
             
+            // CRITICAL FIX: added inSR and outSR to ensure coordinate systems match (4326 = WGS84/GPS)
             const params = new URLSearchParams({
                 where: "1=1", 
                 geometry: bboxString,
                 geometryType: "esriGeometryEnvelope",
                 spatialRel: "esriSpatialRelIntersects",
-                // Request specific official fields
+                inSR: "4326",
+                outSR: "4326",
                 outFields: "RESNAME,NRIS_Refnum,LISTED_DATE,ADDRESS,CITY,STATE",
                 returnGeometry: "true",
                 f: "geojson", 
@@ -263,11 +267,14 @@
                 
                 const data = await response.json();
                 
-                if (data.features) {
+                // Check if features exist and is an array
+                if (data && data.features && data.features.length > 0) {
                     displayLandmarks(data.features);
                     updateStatus(`Found ${data.features.length} official registers`);
                 } else {
-                    updateStatus("No data found in this area", true);
+                    console.warn("NPS Data:", data);
+                    updateStatus("No historic sites found nearby", true);
+                    if (markersLayerGroup) markersLayerGroup.clearLayers();
                 }
             } catch (error) {
                 console.error("Error fetching landmarks:", error);
@@ -284,11 +291,10 @@
                 markersLayerGroup = window.L.layerGroup().addTo(map);
             }
 
-            if (features.length === 0) return;
-
+            // Using inline styles for fill/stroke to ensure visibility even if Tailwind is slow to parse
             const historicIcon = window.L.divIcon({
                 className: 'bg-transparent',
-                html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8 text-indigo-800 drop-shadow-md"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm0 8.625a1.125 1.125 0 100 2.25 1.125 1.125 0 000-2.25zM15.375 12a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM7.5 10.5a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zm10.5-1.5a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5z" clip-rule="evenodd" /></svg>`,
+                html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32" fill="#3730a3" stroke="white" stroke-width="1" class="drop-shadow-md"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm0 8.625a1.125 1.125 0 100 2.25 1.125 1.125 0 000-2.25zM15.375 12a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM7.5 10.5a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zm10.5-1.5a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5z" clip-rule="evenodd" /></svg>`,
                 iconSize: [32, 32],
                 iconAnchor: [16, 32],
                 popupAnchor: [0, -32]
@@ -298,11 +304,10 @@
                 const coords = feature.geometry.coordinates;
                 const props = feature.properties;
                 
-                // Store data for sidebar/card access
-                // Use Reference Number as ID, or fallback to random if missing (rare)
                 const id = props.NRIS_Refnum || Math.random().toString(36).substr(2, 9);
                 landmarksStore[id] = props;
 
+                // GeoJSON is [lng, lat]
                 const lat = coords[1];
                 const lng = coords[0];
                 const name = props.RESNAME || "Historic Site";
@@ -334,7 +339,7 @@
 
             if (!document.getElementById('map')) return;
 
-            map = window.L.map('map').setView([currentLat, currentLng], 4);
+            map = window.L.map('map').setView([currentLat, currentLng], 14);
             map.invalidateSize();
 
             // Use CartoDB Positron tiles for a simpler style
@@ -376,25 +381,20 @@
             document.getElementById('cardTitle').textContent = data.RESNAME || "Unknown Name";
             document.getElementById('cardRefNum').textContent = `Reference #: ${data.NRIS_Refnum}`;
             
-            // Format Date (Epoch or String)
             let dateStr = "Unknown";
             if (data.LISTED_DATE) {
-                // Often returns as timestamp or ISO string
                 const dateObj = new Date(data.LISTED_DATE);
                 if (!isNaN(dateObj)) dateStr = dateObj.toLocaleDateString();
                 else dateStr = data.LISTED_DATE;
             }
             document.getElementById('dataListed').textContent = dateStr;
             
-            // Location
             const city = data.CITY || "";
             const state = data.STATE || "";
             document.getElementById('dataLocation').textContent = `${city}${city && state ? ', ' : ''}${state}`;
             
             document.getElementById('dataRef').textContent = data.NRIS_Refnum;
 
-            // Official Gallery Link (NPS NPGallery)
-            // Usually follows format: https://npgallery.nps.gov/AssetDetail/NRIS/[RefNum]
             const linkBtn = document.getElementById('npsLink');
             if (data.NRIS_Refnum) {
                 linkBtn.href = `https://npgallery.nps.gov/AssetDetail/NRIS/${data.NRIS_Refnum}`;
@@ -403,7 +403,6 @@
                 linkBtn.classList.add('hidden');
             }
 
-            // Show Card
             card.classList.remove('hidden');
         }
 
