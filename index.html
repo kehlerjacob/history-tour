@@ -246,8 +246,8 @@
     </div>
 
     <!-- NAVIGATION PANEL (Green Bar - Fixed to Bottom) -->
-    <div id="navigationPanel"
-        class="fixed inset-x-0 bottom-0 bg-green-600 text-white p-4 sm:p-6 shadow-2xl rounded-t-3xl transition-all duration-300 transform translate-y-full opacity-0 z-[5000] h-48 sm:h-auto">
+    <div id="navigationPanel" style="padding-bottom: calc(env(safe-area-inset-bottom, 20px) + 2rem);"
+        class="fixed inset-x-0 bottom-0 bg-green-600 text-white p-4 sm:p-6 shadow-2xl rounded-t-3xl transition-all duration-300 transform translate-y-full opacity-0 z-[5000] min-h-[12rem] h-auto">
         <div class="max-w-xl mx-auto flex flex-col h-full">
 
             <!-- Current Step Display -->
@@ -819,25 +819,39 @@
 
             potentialStops.sort((a, b) => a.distance - b.distance);
 
-            tourRoute = [startPoint, ...potentialStops.slice(0, 5)];
+            // Create the route: Start -> Closest Stops -> Return to Start
+            const returnToStart = { ...startPoint, title: "Return to Start" };
+            tourRoute = [startPoint, ...potentialStops.slice(0, 5), returnToStart];
             currentTourStep = 0;
             currentManeuverIndex = -1;
 
-            // Draw initial Straight Line Path (Pre-Navigation)
-            if (tourPath) map.removeLayer(tourPath);
-            const straightLineCoords = tourRoute.map(p => L.latLng(p.lat, p.lon));
-            tourPath = L.polyline(straightLineCoords, {
-                color: '#84cc16',
-                weight: 3,
-                opacity: 0.5,
-                dashArray: '10, 10'
-            }).addTo(map);
+            try {
+                // Draw initial Straight Line Path (Pre-Navigation)
+                if (tourPath) map.removeLayer(tourPath);
+                const straightLineCoords = tourRoute.map(p => L.latLng(p.lat, p.lon));
+                tourPath = L.polyline(straightLineCoords, {
+                    color: '#84cc16',
+                    weight: 3,
+                    opacity: 0.5,
+                    dashArray: '10, 10'
+                }).addTo(map);
 
-            document.getElementById('navigationPanel').classList.remove('translate-y-full', 'opacity-0');
-            document.getElementById('tourPanel').classList.add('hidden');
+                document.getElementById('navigationPanel').classList.remove('translate-y-full', 'opacity-0');
+                document.getElementById('tourPanel').classList.add('hidden');
 
-            updateNavigationPanel();
-            map.fitBounds(tourPath.getBounds(), { padding: [50, 50] });
+                // CHANGE BUTTON TO STOP TOUR
+                const tourBtn = document.getElementById('startTourButton');
+                tourBtn.textContent = "Stop Tour";
+                tourBtn.classList.remove('bg-emerald-500', 'hover:bg-emerald-600');
+                tourBtn.classList.add('bg-red-500', 'hover:bg-red-600');
+                tourBtn.onclick = endTour;
+
+                updateNavigationPanel();
+                map.fitBounds(tourPath.getBounds(), { padding: [50, 50] });
+            } catch (e) {
+                console.error("Create Tour Error:", e);
+                showMessage("Tour Error", "Failed to create tour: " + e.message);
+            }
         }
 
 
@@ -960,14 +974,26 @@
                 updateNavigationPanel(); // This triggers initiateRoute()
             }
             else if (currentTourStep === tourRoute.length - 1) {
-                // End Tour logic
-                if (tourPath) map.removeLayer(tourPath);
-                tourRoute = null;
-                currentTourStep = 0;
-                currentManeuverIndex = -1;
-                document.getElementById('navigationPanel').classList.add('translate-y-full', 'opacity-0');
-                showMessage("Tour Ended", "Thank you for exploring! Start a new tour anytime.");
+                endTour();
             }
+        }
+
+        const endTour = () => {
+            // End Tour logic
+            if (tourPath) map.removeLayer(tourPath);
+            tourRoute = null;
+            currentTourStep = 0;
+            currentManeuverIndex = -1;
+            document.getElementById('navigationPanel').classList.add('translate-y-full', 'opacity-0');
+
+            // RESET BUTTON TO START TOUR
+            const tourBtn = document.getElementById('startTourButton');
+            tourBtn.textContent = "Start Tour";
+            tourBtn.classList.remove('bg-red-500', 'hover:bg-red-600');
+            tourBtn.classList.add('bg-emerald-500', 'hover:bg-emerald-600');
+            tourBtn.onclick = openTourPanel;
+
+            showMessage("Tour Ended", "Thank you for exploring! Start a new tour anytime.");
         }
 
         const checkTourProgress = (userLatLong) => {
