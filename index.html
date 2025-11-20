@@ -202,6 +202,7 @@
                     }
                 },
                 (error) => {
+                    // Geolocation error captured here, falling back to D.C.
                     console.error("Location error:", error);
                     updateStatus("Location denied. Using Default (D.C.)", true);
                     if (map) fetchNearbyLandmarks(); 
@@ -210,31 +211,18 @@
             );
         }
 
-        function addUserMarker() {
-            if (!map) return;
-            if (userLocationMarker) map.removeLayer(userLocationMarker);
-            
-            const userIcon = window.L.divIcon({
-                className: 'bg-blue-600 border-2 border-white rounded-full shadow-xl',
-                iconSize: [16, 16],
-                html: ''
-            });
-            
-            userLocationMarker = window.L.marker([currentLat, currentLng], {icon: userIcon})
-                .addTo(map)
-                .bindPopup("You are here")
-                .openPopup();
-        }
-
         function getBoundingBox(lat, lng, radiusMiles) {
             const latChange = radiusMiles / 69.0;
             const lngChange = radiusMiles / (69.0 * Math.cos(lat * Math.PI / 180));
             
+            // CRITICAL FIX: Rounding coordinates to 6 decimal places to prevent ArcGIS server parsing errors (400 Bad Request)
+            const precision = 6; 
+            
             return {
-                xmin: lng - lngChange,
-                ymin: lat - latChange,
-                xmax: lng + lngChange,
-                ymax: lat + latChange
+                xmin: (lng - lngChange).toFixed(precision),
+                ymin: (lat - latChange).toFixed(precision),
+                xmax: (lng + lngChange).toFixed(precision),
+                ymax: (lat + latChange).toFixed(precision)
             };
         }
 
@@ -264,11 +252,15 @@
             });
 
             const url = `${baseUrl}?${params.toString()}`;
-            console.log("Querying NPS API:", url); // Debugging log
+            console.log("Querying NPS API (Cleaned BBOX):", url); 
 
             try {
                 const response = await fetch(url);
-                if (!response.ok) throw new Error("NPS API request failed");
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error("NPS API detailed error:", errorData);
+                    throw new Error(`NPS API request failed with status ${response.status}. Message: ${errorData.error.message || 'Unknown error'}`);
+                }
                 
                 const data = await response.json();
                 
@@ -282,7 +274,7 @@
                 }
             } catch (error) {
                 console.error("Error fetching landmarks:", error);
-                updateStatus("Error connecting to NPS database", true);
+                updateStatus("Error connecting to NPS database or query rejected.", true);
             }
         }
 
