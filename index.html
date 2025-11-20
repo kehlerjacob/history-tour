@@ -508,13 +508,22 @@
             // Reference point: User location (if available) or current map center (fallback)
             const refLatLong = userMarker ? userMarker.getLatLng() : map.getCenter();
             
+            // Convert the Leaflet LatLng start point into the consistent object format {lat, lon}
+            const startPoint = {
+                lat: refLatLong.lat,
+                lon: refLatLong.lng, // Leaflet LatLng objects use 'lng' property
+                title: userMarker ? "Your Start Location" : "Map Center Start",
+                isWiki: false,
+                url: null
+            };
+
             // 2. Filter landmarks within the specified tour distance range
             let potentialStops = tourPoints.filter(p => {
-                const distance = getDistance(refLatLong.lat, refLatLong.lng, p.lat, p.lon);
+                const distance = getDistance(startPoint.lat, startPoint.lon, p.lat, p.lon);
                 return distance <= maxDistanceMeters; 
             }).map(p => ({
                 ...p,
-                distance: getDistance(refLatLong.lat, refLatLong.lng, p.lat, p.lon)
+                distance: getDistance(startPoint.lat, startPoint.lon, p.lat, p.lon)
             }));
 
             // 3. Final check: do we have enough *local* stops for a tour?
@@ -528,8 +537,9 @@
             // Sort by proximity and select the 5 closest
             potentialStops.sort((a, b) => a.distance - b.distance);
 
-            // Construct the final route: Start Point + 5 closest stops
-            tourRoute = [refLatLong, ...potentialStops.slice(0, 5).map(p => ({
+            // Construct the final route: Start Point + 5 closest stops.
+            // All points in tourRoute now have consistent {lat, lon} properties.
+            tourRoute = [startPoint, ...potentialStops.slice(0, 5).map(p => ({
                 lat: p.lat, 
                 lon: p.lon, 
                 title: p.title, 
@@ -540,6 +550,7 @@
             
             // Draw Tour Route on map
             if (tourPath) map.removeLayer(tourPath);
+            // Mapping now works correctly as every object in tourRoute has the 'lon' property.
             const routeCoordinates = tourRoute.map(p => L.latLng(p.lat, p.lon));
             tourPath = L.polyline(routeCoordinates, {color: 'green', weight: 4, opacity: 0.7}).addTo(map);
 
