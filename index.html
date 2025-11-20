@@ -375,7 +375,7 @@
         };
 
 
-        // --- MAP & GEO LOCATION LOGIC (same as previous) ---
+        // --- MAP & GEO LOCATION LOGIC ---
 
         const initMap = () => {
             map = L.map('map', { zoomControl: false }).setView([38.8893, -77.0502], 13);
@@ -405,23 +405,56 @@
              showMessage("Location Changed", `Map centered on ${name}. Loading local historic places...`);
         };
         
+        /**
+         * Initializes geolocation: gets a quick initial fix, then starts continuous watch.
+         */
         const startWatchingPosition = () => {
             if (watchingPosition) return;
-            // ... (rest of startWatchingPosition remains the same)
-            if ('geolocation' in navigator) {
-                watchingPosition = true;
-                document.getElementById('locationStatus').classList.add('opacity-100', 'pointer-events-auto');
-                document.getElementById('locationStatusText').textContent = "Waiting for GPS signal...";
+            
+            const locationStatus = document.getElementById('locationStatus');
+            const locationStatusText = document.getElementById('locationStatusText');
 
-                watchId = navigator.geolocation.watchPosition(
-                    watchPositionSuccess, 
-                    watchPositionError, 
-                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+            if ('geolocation' in navigator) {
+                // Show status bubble immediately
+                locationStatus.classList.add('opacity-100', 'pointer-events-auto');
+                locationStatusText.textContent = "Requesting initial GPS location...";
+                
+                // 1. Get quick initial fix (faster startup)
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        // Use the success handler logic from watchPositionSuccess to initialize the marker and center the map right away.
+                        watchPositionSuccess(position); 
+                        locationStatusText.textContent = "Initial location acquired. Starting continuous tracking...";
+                        
+                        // 2. Start continuous watch AFTER initial fix
+                        watchingPosition = true;
+                        watchId = navigator.geolocation.watchPosition(
+                            watchPositionSuccess, 
+                            watchPositionError, 
+                            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                        );
+                    },
+                    (error) => {
+                        // If initial fix fails (e.g., permission denied, timeout), display error
+                        watchPositionError(error); 
+                        
+                        // 3. Still start continuous watch, in case the error was temporary or a timeout
+                        watchingPosition = true;
+                        watchId = navigator.geolocation.watchPosition(
+                            watchPositionSuccess, 
+                            watchPositionError, 
+                            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                        );
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
                 );
+
             } else {
                 showMessage("Geolocation Not Supported", "Your browser does not support Geolocation, cannot track position.");
+                locationStatusText.textContent = "Geolocation unsupported.";
             }
         };
+
 
         const watchPositionSuccess = (position) => {
             const { latitude, longitude, heading } = position.coords;
@@ -433,6 +466,7 @@
             // Initialize or move user marker
             if (!userMarker) {
                 userMarker = L.marker(newLatLong, { icon: userArrowIcon }).addTo(map).bindPopup("Your Location");
+                // Crucial step: Center map on user location immediately on first fix
                 map.setView(newLatLong, map.getZoom() > 14 ? map.getZoom() : 15);
             } else {
                 userMarker.setLatLng(newLatLong);
@@ -454,9 +488,14 @@
 
         const watchPositionError = (error) => {
             console.error('Geolocation error:', error);
-            document.getElementById('locationStatusText').textContent = "Geolocation Error. Check permissions.";
+            
+            let message = "Geolocation Error. Check permissions.";
+            if (error.code === error.PERMISSION_DENIED) {
+                 message = "Permission denied. Location marker may not appear.";
+            }
+
+            document.getElementById('locationStatusText').textContent = message;
             showMessage("GPS Error", `Error Code ${error.code}: ${error.message}`);
-            watchingPosition = false;
         };
 
 
@@ -466,8 +505,67 @@
             document.getElementById('tourPanel').classList.toggle('hidden');
         }
 
+        // --- (Wikipedia Fetching functions omitted for brevity, they remain unchanged) ---
+        // ... (fetchWikipediaLandmarks, fetchAndPinLandmarks, pinLandmark, createTour, etc., remain as before)
+        const fetchWikipediaLandmarks = async (lat, lon, radiusKm, keyword) => {
+            if (isFetching) return;
+            isFetching = true;
+            landmarkMarkers.clearLayers();
+            tourPoints = []; 
+
+            // Convert km to meters for the API
+            const radiusMeters = Math.min(radiusKm * 1000, 10000); 
+
+            let url = `${WIKIPEDIA_API_URL}?action=query&list=geosearch&gsradius=${radiusMeters}&gscoord=${lat}|${lon}&gslimit=50&format=json&origin=*`;
+            
+            try {
+                const data = await fetchWithRetry(url);
+                const pages = data.query?.geosearch || [];
+                
+                // Optional keyword filtering (applied client-side)
+                const filteredPages = keyword 
+                    ? pages.filter(p => p.title.toLowerCase().includes(keyword.toLowerCase()))
+                    : pages;
+
+                filteredPages.forEach(p => {
+                    pinLandmark(p.lat, p.lon, p.title, `https://en.wikipedia.org/?curid=${p.pageid}`);
+                });
+                
+                isFetching = false;
+                document.getElementById('tourStatus').textContent = `Found ${filteredPages.length} landmarks.`;
+
+            } catch (error) {
+                console.error("Wikipedia GeoSearch Error:", error);
+                showMessage("Data Error", "Could not fetch landmark data from Wikipedia.");
+                isFetching = false;
+            }
+        };
+
+        const pinLandmark = (lat, lon, title, url) => {
+            const marker = L.marker([lat, lon], { icon: landmarkIcon }).addTo(landmarkMarkers);
+            const popupContent = `
+                <div class="font-bold text-indigo-700">${title}</div>
+                <div class="text-sm mt-1">
+                    <a href="${url}" target="_blank" class="text-indigo-500 hover:text-indigo-700 underline">Read on Wikipedia</a>
+                </div>
+            `;
+            marker.bindPopup(popupContent);
+            tourPoints.push({lat, lon, title, isWiki: true, url, marker});
+        };
+
+        const fetchAndPinLandmarks = () => {
+            const center = map.getCenter();
+            const radiusKm = document.getElementById('radiusSlider').value;
+            const keyword = document.getElementById('categoryFilter').value.trim();
+            fetchWikipediaLandmarks(center.lat, center.lng, radiusKm, keyword);
+        };
+
+
+        const openTourPanel = () => {
+            document.getElementById('tourPanel').classList.toggle('hidden');
+        }
+
         const createTour = (reset=false) => {
-            // ... (rest of createTour remains the same, calculating initial route)
             const maxDistanceMiles = parseFloat(document.getElementById('tourDistance').value);
             const maxDistanceMeters = maxDistanceMiles * 1609.34;
             
