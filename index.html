@@ -144,7 +144,6 @@
         let markersLayerGroup = null;
         let userLocationMarker = null; // Marker for the initial GPS location
         let searchRadiusCircle = null; // Circle to show the search area
-        // Removed mapMoveTimer and DEBOUNCE_DELAY since we no longer track map moves
         const MILES_TO_METERS = 1609.34; // Conversion factor
         
         const landmarksStore = {};
@@ -238,8 +237,6 @@
             );
         }
         
-        // Removed handleMapMove since we don't want the search center to move with the map
-
         function getBoundingBox(lat, lng, radiusMiles) {
             const latChange = radiusMiles / 69.0;
             const lngChange = radiusMiles / (69.0 * Math.cos(lat * Math.PI / 180));
@@ -258,6 +255,9 @@
         async function fetchNearbyLandmarks() {
             if (!map) return;
             
+            // Log 1: Coordinates and Radius
+            console.log(`DEBUG: Starting search at Lat: ${currentLat}, Lng: ${currentLng} with Radius: ${currentRadiusMiles} miles.`);
+
             // Update the search radius circle visualization, keeping it centered on currentLat/Lng
             const radiusMeters = currentRadiusMiles * MILES_TO_METERS;
             if (searchRadiusCircle) {
@@ -277,6 +277,9 @@
             updateStatus(`Searching within ${currentRadiusMiles} mile(s) centered at (${currentLat.toFixed(4)}, ${currentLng.toFixed(4)})...`);
 
             const bbox = getBoundingBox(currentLat, currentLng, currentRadiusMiles);
+            // Log 2: Bounding Box
+            console.log("DEBUG: Calculated Bounding Box (xmin, ymin, xmax, ymax):", bbox);
+
             // Format: xmin,ymin,xmax,ymax (Lng, Lat, Lng, Lat)
             const bboxString = `${bbox.xmin},${bbox.ymin},${bbox.xmax},${bbox.ymax}`;
             
@@ -297,15 +300,19 @@
             });
 
             const url = `${baseUrl}?${params.toString()}`;
-            console.log("Querying NPS API (Fixed BBOX):", url); 
+            // Log 3: Full Query URL
+            console.log("DEBUG: Full NPS API Query URL:", url); 
 
             try {
                 const response = await fetch(url);
                 
+                // Log 4: Response Status
+                console.log(`DEBUG: NPS API Response Status: ${response.status}`);
+
                 if (response.status === 400) {
-                     // Log 400 error explicitly to catch potential BBOX issues
+                     // Log 4a: Detailed 400 error
                     const errorData = await response.json().catch(() => ({ error: { message: 'Could not parse response for 400 error.' }}));
-                    console.error("NPS API 400 ERROR:", errorData);
+                    console.error("DEBUG: NPS API 400 ERROR (Bad Request - Check BBOX/Params):", errorData);
                     updateStatus(`Search failed: Invalid query format.`, true);
                     return;
                 }
@@ -317,15 +324,19 @@
                 const data = await response.json();
                 
                 if (data.features && data.features.length > 0) {
+                    // Log 5: Success
+                    console.log(`DEBUG: NPS API Success. Found ${data.features.length} features.`, data);
                     displayLandmarks(data.features);
                     updateStatus(`Found ${data.features.length} historic sites`);
                 } else {
-                    console.warn("No features returned:", data);
+                    // Log 6: No Features
+                    console.warn("DEBUG: No features returned from NPS API. Full response data:", data);
                     updateStatus("No historic sites found nearby", true);
                     if (markersLayerGroup) markersLayerGroup.clearLayers();
                 }
             } catch (error) {
-                console.error("Error fetching landmarks:", error);
+                // Log 7: General Fetch Error
+                console.error("DEBUG: General Error fetching landmarks:", error);
                 updateStatus("Error connecting to NPS database or query rejected.", true);
             }
         }
@@ -395,9 +406,6 @@
 
             markersLayerGroup = window.L.layerGroup().addTo(map);
             
-            // Removed: map.on('moveend', handleMapMove); 
-            // The map will no longer search when panned
-
             // Start location search
             getUserLocation();
 
