@@ -22,7 +22,6 @@
         .leaflet-container {
             font-family: 'Inter', sans-serif;
         }
-        /* Custom Slider Styling */
         input[type=range] {
             -webkit-appearance: none; 
             background: transparent; 
@@ -41,7 +40,7 @@
             width: 100%;
             height: 4px;
             cursor: pointer;
-            background: #a5b4fc; /* Indigo-300 */
+            background: #a5b4fc; 
             border-radius: 2px;
         }
     </style>
@@ -55,7 +54,6 @@
             <p class="text-indigo-200 text-sm">Official National Register Data (NPS)</p>
         </div>
 
-        <!-- Radius Control -->
         <div class="bg-indigo-700 rounded-lg p-3 flex items-center gap-4 w-full md:w-auto">
             <label for="radiusSlider" class="text-white text-sm font-medium whitespace-nowrap">Search Radius:</label>
             <input type="range" id="radiusSlider" min="0.5" max="10" step="0.5" value="1" class="w-full md:w-48">
@@ -66,20 +64,20 @@
     <!-- Map Container -->
     <div id="map" class="flex-1 w-full relative z-0 bg-gray-200"></div>
 
-    <!-- Location Status Notification -->
+    <!-- Location Status -->
     <div id="locationStatus" class="fixed top-24 left-1/2 transform -translate-x-1/2 bg-white px-4 py-2 rounded-full shadow-lg z-[1000] flex items-center gap-2 transition-opacity duration-500 opacity-0 pointer-events-none">
         <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
         <span class="text-sm font-medium text-gray-700" id="locationStatusText">Locating...</span>
     </div>
 
-    <!-- Landmark Details Card (Modal-style) -->
+    <!-- Landmark Details Card -->
     <div id="detailsCard" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-40 hidden flex items-center justify-center p-4" onclick="closeCard()">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-md md:max-w-lg lg:max-w-2xl overflow-hidden transform transition-all duration-300 scale-100" onclick="event.stopPropagation()">
             <!-- Card Header -->
             <div class="p-5 border-b border-gray-100 flex justify-between items-start bg-indigo-50">
                 <div>
                     <h2 id="cardTitle" class="text-xl md:text-2xl font-extrabold text-gray-800">Landmark Details</h2>
-                    <p id="cardSubtitle" class="text-xs text-indigo-200 mt-1 hidden"></p>
+                    <p id="cardRefNum" class="text-sm text-indigo-500 font-medium mt-1"></p>
                 </div>
                 <button onclick="closeCard()" class="text-gray-400 hover:text-gray-600 transition">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -88,34 +86,37 @@
             
             <!-- Card Body -->
             <div class="p-5 max-h-[70vh] overflow-y-auto">
-                <div id="cardContent" class="text-gray-700 space-y-4">
-                    <div id="summarySection">
-                        <h3 class="text-lg font-semibold text-indigo-700 mb-2">Historical Summary (Powered by Gemini)</h3>
-                        <div id="summaryText" class="text-sm leading-relaxed">
-                            <p class="italic text-gray-500">Loading historical details...</p>
-                        </div>
-                        <div id="sourcesContainer" class="mt-4 pt-4 border-t border-gray-100 hidden">
-                             <p class="font-medium text-xs text-gray-500 mb-1">Sources:</p>
-                             <ul id="sourcesList" class="list-disc pl-5 text-xs text-indigo-600 space-y-1"></ul>
+                <div id="cardContent" class="space-y-6">
+                    
+                    <!-- Official Data Section -->
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Official Registry Data</h3>
+                        <div class="grid grid-cols-1 gap-y-4">
+                            <div>
+                                <p class="text-xs text-gray-500">Listed Date</p>
+                                <p id="dataListed" class="text-sm font-semibold text-gray-800">-</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-gray-500">Location</p>
+                                <p id="dataLocation" class="text-sm font-semibold text-gray-800">-</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-gray-500">NPS Reference Number</p>
+                                <p id="dataRef" class="text-sm font-semibold text-gray-800 font-mono">-</p>
+                            </div>
                         </div>
                     </div>
 
-                    <div id="errorSection" class="hidden bg-red-50 p-3 rounded-lg border border-red-200">
-                        <p class="text-sm text-red-700 font-medium">Error:</p>
-                        <p id="errorText" class="text-xs text-red-600 mt-1"></p>
+                    <div class="text-center">
+                         <a id="npsLink" href="#" target="_blank" class="inline-flex items-center justify-center w-full px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition">
+                            View on National Park Service Gallery
+                            <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                        </a>
+                        <p class="text-xs text-gray-400 mt-2">Opens the official scanned documents in a new tab.</p>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
-
-    <!-- Loading Spinner (for LLM call) -->
-    <div id="loadingSpinner" class="fixed bottom-4 right-4 bg-indigo-700 text-white p-3 rounded-full shadow-lg z-50 flex items-center hidden">
-        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-        <span class="text-sm font-medium">Gathering history...</span>
     </div>
 
     <script type="module">
@@ -126,19 +127,21 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        const apiKey = ""; 
 
         let app, db, auth;
         let userId = null;
-        let isAuthReady = false;
 
         // App State
         let map = null;
-        let currentLat = 39.8283; // Default: Center of US
+        let currentLat = 39.8283; 
         let currentLng = -98.5795;
         let currentRadiusMiles = 1;
         let markersLayerGroup = null;
         let userLocationMarker = null;
+        
+        // Store landmark data in memory to access when clicking markers
+        // Key: NRIS_Refnum, Value: Object properties
+        const landmarksStore = {};
 
         // --- FIREBASE SETUP ---
         function initializeFirebase() {
@@ -146,28 +149,15 @@
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
-                setLogLevel('debug'); 
                 onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        userId = user.uid;
-                    } else {
+                    if (!user) {
                         try {
                             if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken);
                             else await signInAnonymously(auth);
-                            userId = auth.currentUser.uid;
-                        } catch (e) { console.error(e); userId = crypto.randomUUID(); }
+                        } catch (e) { console.error(e); }
                     }
-                    isAuthReady = true;
                 });
-            } else {
-                userId = crypto.randomUUID();
-                isAuthReady = true;
             }
-        }
-
-        function getLandmarkDocPath(landmarkId) {
-            const safeId = landmarkId.toString().replace(/[^a-zA-Z0-9]/g, '_');
-            return `artifacts/${appId}/public/data/landmarks/${safeId}`;
         }
 
         // --- GEOLOCATION & NPS API ---
@@ -202,7 +192,6 @@
                 (position) => {
                     currentLat = position.coords.latitude;
                     currentLng = position.coords.longitude;
-                    
                     updateStatus("Location found!");
                     
                     if (map) {
@@ -235,9 +224,7 @@
                 .bindPopup("You are here");
         }
 
-        // Calculate bounding box for NPS query
         function getBoundingBox(lat, lng, radiusMiles) {
-            // Approx conversions
             const latChange = radiusMiles / 69.0;
             const lngChange = radiusMiles / (69.0 * Math.cos(lat * Math.PI / 180));
             
@@ -254,23 +241,20 @@
             
             updateStatus(`Searching within ${currentRadiusMiles} mile(s)...`);
 
-            // Calculate bounding box
             const bbox = getBoundingBox(currentLat, currentLng, currentRadiusMiles);
             const bboxString = `${bbox.xmin},${bbox.ymin},${bbox.xmax},${bbox.ymax}`;
-
-            // NPS ArcGIS REST API Endpoint
             const baseUrl = "https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer/0/query";
             
-            // Parameters for spatial query
             const params = new URLSearchParams({
-                where: "1=1", // Select all that match geometry
+                where: "1=1", 
                 geometry: bboxString,
                 geometryType: "esriGeometryEnvelope",
                 spatialRel: "esriSpatialRelIntersects",
-                outFields: "RESNAME,NRIS_Refnum", // Resource Name and Reference Number
+                // Request specific official fields
+                outFields: "RESNAME,NRIS_Refnum,LISTED_DATE,ADDRESS,CITY,STATE",
                 returnGeometry: "true",
-                f: "geojson", // Request GeoJSON format
-                resultRecordCount: "50" // Limit results to prevent overcrowding
+                f: "geojson", 
+                resultRecordCount: "50" 
             });
 
             try {
@@ -283,8 +267,6 @@
                     displayLandmarks(data.features);
                     updateStatus(`Found ${data.features.length} official registers`);
                 } else {
-                    // Sometimes API returns error in JSON body
-                    console.warn("NPS API returned no features or error:", data);
                     updateStatus("No data found in this area", true);
                 }
             } catch (error) {
@@ -304,7 +286,6 @@
 
             if (features.length === 0) return;
 
-            // Official NPS-style color or generic historic icon
             const historicIcon = window.L.divIcon({
                 className: 'bg-transparent',
                 html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8 text-indigo-800 drop-shadow-md"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm0 8.625a1.125 1.125 0 100 2.25 1.125 1.125 0 000-2.25zM15.375 12a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM7.5 10.5a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zm10.5-1.5a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5z" clip-rule="evenodd" /></svg>`,
@@ -317,22 +298,22 @@
                 const coords = feature.geometry.coordinates;
                 const props = feature.properties;
                 
-                // GeoJSON points are [lng, lat], Leaflet uses [lat, lng]
+                // Store data for sidebar/card access
+                // Use Reference Number as ID, or fallback to random if missing (rare)
+                const id = props.NRIS_Refnum || Math.random().toString(36).substr(2, 9);
+                landmarksStore[id] = props;
+
                 const lat = coords[1];
                 const lng = coords[0];
-                
-                // NPS Field Names
                 const name = props.RESNAME || "Historic Site";
-                const refNum = props.NRIS_Refnum || "Unknown";
 
                 const marker = window.L.marker([lat, lng], { icon: historicIcon })
                     .bindPopup(
                         `<div class="text-center">
                             <h4 class="font-bold text-indigo-700 mb-1">${name}</h4>
-                            <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">NRHP #${refNum}</span>
-                            <button class="block w-full mt-3 text-sm text-white bg-indigo-500 hover:bg-indigo-600 px-3 py-1 rounded shadow-sm transition" 
-                                onclick="openCard('${refNum}', '${name.replace(/'/g, "\\'")}', 'National Register of Historic Places')">
-                                View History
+                            <button class="block w-full mt-2 text-sm text-white bg-indigo-500 hover:bg-indigo-600 px-3 py-1 rounded shadow-sm transition" 
+                                onclick="openCard('${id}')">
+                                View Official Record
                             </button>
                         </div>`
                     );
@@ -347,19 +328,18 @@
             if (map) return;
             
             if (typeof window.L === 'undefined' || !window.L.map) {
-                console.log("Leaflet not ready, polling...");
                 setTimeout(initMap, 100);
                 return;
             }
 
             if (!document.getElementById('map')) return;
 
-            console.log("Initializing map...");
             map = window.L.map('map').setView([currentLat, currentLng], 4);
             map.invalidateSize();
 
-            window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors'
+            // Use CartoDB Positron tiles for a simpler style
+            window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
             }).addTo(map);
 
             markersLayerGroup = window.L.layerGroup().addTo(map);
@@ -383,120 +363,52 @@
             fetchNearbyLandmarks();
         });
 
-        // --- CARD & AI LOGIC ---
+        // --- CARD LOGIC (NO AI) ---
 
-        window.openCard = async function(id, name, type) {
+        // Expose openCard to global scope for popup buttons
+        window.openCard = function(id) {
+            const data = landmarksStore[id];
+            if (!data) return;
+
             const card = document.getElementById('detailsCard');
-            const title = document.getElementById('cardTitle');
-            const summaryText = document.getElementById('summaryText');
-            const errorSection = document.getElementById('errorSection');
-            const summarySection = document.getElementById('summarySection');
-            const loadingSpinner = document.getElementById('loadingSpinner');
-
-            title.textContent = name;
-            summaryText.innerHTML = '<p class="italic text-gray-500">Loading historical details...</p>';
-            errorSection.classList.add('hidden');
-            summarySection.classList.remove('hidden');
-            card.classList.remove('hidden');
             
-            const cachedData = await getCachedDetails(id);
-            if (cachedData) {
-                updateCardContent(cachedData.summary, cachedData.sources);
-                return;
+            // Populate Data
+            document.getElementById('cardTitle').textContent = data.RESNAME || "Unknown Name";
+            document.getElementById('cardRefNum').textContent = `Reference #: ${data.NRIS_Refnum}`;
+            
+            // Format Date (Epoch or String)
+            let dateStr = "Unknown";
+            if (data.LISTED_DATE) {
+                // Often returns as timestamp or ISO string
+                const dateObj = new Date(data.LISTED_DATE);
+                if (!isNaN(dateObj)) dateStr = dateObj.toLocaleDateString();
+                else dateStr = data.LISTED_DATE;
+            }
+            document.getElementById('dataListed').textContent = dateStr;
+            
+            // Location
+            const city = data.CITY || "";
+            const state = data.STATE || "";
+            document.getElementById('dataLocation').textContent = `${city}${city && state ? ', ' : ''}${state}`;
+            
+            document.getElementById('dataRef').textContent = data.NRIS_Refnum;
+
+            // Official Gallery Link (NPS NPGallery)
+            // Usually follows format: https://npgallery.nps.gov/AssetDetail/NRIS/[RefNum]
+            const linkBtn = document.getElementById('npsLink');
+            if (data.NRIS_Refnum) {
+                linkBtn.href = `https://npgallery.nps.gov/AssetDetail/NRIS/${data.NRIS_Refnum}`;
+                linkBtn.classList.remove('hidden');
+            } else {
+                linkBtn.classList.add('hidden');
             }
 
-            loadingSpinner.classList.remove('hidden');
-            try {
-                await fetchLandmarkDetails(id, name, type);
-            } catch (error) {
-                errorSection.classList.remove('hidden');
-                document.getElementById('errorText').textContent = error.message;
-                summarySection.classList.add('hidden');
-            } finally {
-                loadingSpinner.classList.add('hidden');
-            }
+            // Show Card
+            card.classList.remove('hidden');
         }
 
         window.closeCard = function() {
             document.getElementById('detailsCard').classList.add('hidden');
-            document.getElementById('summaryText').innerHTML = '<p class="italic text-gray-500">Loading historical details...</p>';
-            document.getElementById('sourcesContainer').classList.add('hidden');
-        }
-
-        function updateCardContent(summary, sources) {
-            const summaryText = document.getElementById('summaryText');
-            const sourcesContainer = document.getElementById('sourcesContainer');
-            const sourcesList = document.getElementById('sourcesList');
-
-            let formattedSummary = summary.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-            formattedSummary = formattedSummary.replace(/\n\n/g, '</p><p>');
-            formattedSummary = `<p>${formattedSummary}</p>`;
-            summaryText.innerHTML = formattedSummary;
-
-            sourcesList.innerHTML = '';
-            if (sources && sources.length > 0) {
-                sources.forEach(source => {
-                    const li = document.createElement('li');
-                    li.innerHTML = `<a href="${source.uri}" target="_blank" class="hover:underline">${source.title || source.uri}</a>`;
-                    sourcesList.appendChild(li);
-                });
-                sourcesContainer.classList.remove('hidden');
-            } else {
-                sourcesContainer.classList.add('hidden');
-            }
-        }
-
-        async function getCachedDetails(id) {
-            if (!isAuthReady || !db) return null;
-            const docPath = getLandmarkDocPath(id);
-            try {
-                const docSnap = await getDoc(doc(db, docPath));
-                if (docSnap.exists()) return docSnap.data();
-            } catch (e) { console.warn(e); }
-            return null;
-        }
-
-        async function cacheDetails(id, summary, sources) {
-            if (!isAuthReady || !db) return;
-            const docPath = getLandmarkDocPath(id);
-            try {
-                await setDoc(doc(db, docPath), {
-                    summary, sources, cachedAt: new Date().toISOString()
-                }, { merge: true });
-            } catch (e) { console.error(e); }
-        }
-
-        async function fetchLandmarkDetails(id, name, type) {
-            const systemPrompt = "You are a concise, world-class historian. Provide a single, detailed paragraph (max 150 words) summarizing the key historical significance, construction date, and major events associated with this landmark.";
-            const userQuery = `Summarize the history and significance of "${name}" (Type: ${type}).`;
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-
-            const payload = {
-                contents: [{ parts: [{ text: userQuery }] }],
-                tools: [{ "google_search": {} }],
-                systemInstruction: { parts: [{ text: systemPrompt }] },
-            };
-
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) throw new Error("Failed to generate summary.");
-
-            const result = await response.json();
-            const candidate = result.candidates?.[0];
-
-            if (candidate && candidate.content?.parts?.[0]?.text) {
-                const summary = candidate.content.parts[0].text;
-                const sources = candidate.groundingMetadata?.groundingAttributions?.map(a => ({uri: a.web?.uri, title: a.web?.title})).filter(s => s.uri) || [];
-                
-                updateCardContent(summary, sources);
-                await cacheDetails(id, summary, sources);
-            } else {
-                throw new Error("AI returned empty response.");
-            }
         }
 
         document.addEventListener('DOMContentLoaded', initializeFirebase);
