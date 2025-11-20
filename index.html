@@ -174,7 +174,8 @@
         // ORS_API_KEY is configured for the tour feature.
         const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6Ijg1ZWRmZjY2Y2VkZTRkOWVhMmI4NDliNTMxOThhYTY0IiwiaCI6Im11cm11cjY0In0="; 
         
-        // FIX: Reverting to the specific profile endpoint and removing profile from body to resolve the "incorrect value" error.
+        // FIX: Reverting to the standard "URL path only" setup, which is most likely correct,
+        // but adding extensive logging to debug the "unknown" error.
         const ORS_URL = "https://api.openrouteservice.org/v2/directions/walking/geojson";
 
 
@@ -585,7 +586,7 @@ out center;
             // 4. Construct the ORS payload 
             const orsPayload = {
                 coordinates: coords,
-                // Removed 'profile': 'walking' to rely solely on the ORS_URL endpoint definition.
+                // Profile is removed to rely on the URL endpoint: /walking/
                 options: {
                     round_trip: { 
                         points: pointsToUse.length + 1, // Number of stops (user + landmarks)
@@ -594,34 +595,63 @@ out center;
                 }
             };
 
+            // *** DEBUGGING LOGS ***
             console.log("ORS Request URL:", ORS_URL);
-            console.log("ORS Payload:", orsPayload);
+            console.log("ORS Payload (Stringified):", JSON.stringify(orsPayload));
 
 
             // 5. ORS API Request (Round Trip)
             try {
-                const response = await fetch(ORS_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/geo+json, application/json', 
-                        'Content-Type': 'application/json',
-                        'Authorization': ORS_API_KEY 
-                    },
-                    body: JSON.stringify(orsPayload)
-                });
+                // Implementing exponential backoff for robustness
+                const maxRetries = 3;
+                let attempt = 0;
+                let response;
 
-                if (!response.ok) {
-                    let errorText = await response.text();
+                while (attempt < maxRetries) {
+                    attempt++;
                     try {
-                        const errorJson = JSON.parse(errorText);
-                        // Extracting the ORS error message if available
-                        const errorMessage = errorJson.error?.message || `ORS API failed with status ${response.status}`;
-                        throw new Error(errorMessage);
-                    } catch (e) {
-                        // If JSON parsing failed, use the raw text error message
-                        throw new Error(`ORS API failed (${response.status}): ${errorText.substring(0, 100)}...`);
+                        response = await fetch(ORS_URL, {
+                            method: 'POST',
+                            headers: {
+                                // Updated headers based on documentation example
+                                'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8', 
+                                'Content-Type': 'application/json; charset=utf-8',
+                                'Authorization': ORS_API_KEY 
+                            },
+                            body: JSON.stringify(orsPayload)
+                        });
+
+                        if (response.ok) break; // Success, exit loop
+                        
+                        // Handle 429 (Rate Limit) by retrying
+                        if (response.status === 429 && attempt < maxRetries) {
+                            const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s...
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            continue; // Retry
+                        }
+
+                        // For other non-OK statuses (400, 403, 500, etc.)
+                        let errorText = await response.text();
+                        try {
+                            const errorJson = JSON.parse(errorText);
+                            const errorMessage = errorJson.error?.message || `ORS API failed with status ${response.status}`;
+                            throw new Error(errorMessage);
+                        } catch (e) {
+                            throw new Error(`ORS API failed (${response.status}): ${errorText.substring(0, 100)}...`);
+                        }
+                    } catch (error) {
+                        if (attempt === maxRetries) throw error; // Re-throw only on final failure
+                        // For network errors or temporary failures, wait and retry
+                        const delay = Math.pow(2, attempt) * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
                     }
                 }
+                
+                if (!response || !response.ok) {
+                    // This line should only be reached if a final error was thrown inside the loop
+                    throw new Error("Failed to get a successful response from ORS API after retries."); 
+                }
+
 
                 const geoJson = await response.json();
                 
