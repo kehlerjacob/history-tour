@@ -203,7 +203,7 @@
     <!-- Location Status Bubble (REPOSITIONED & Compacted) -->
     <div id="locationStatus" class="fixed top-[9rem] sm:top-[6rem] left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-xl z-[3500] flex items-center justify-center gap-3 transition-opacity duration-500 opacity-0 pointer-events-none w-11/12 max-w-3xl border border-gray-200">
         <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse flex-shrink-0"></div>
-        <span class="text-xs font-medium text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis" id="locationStatusText">Locating...</span>
+        <span class="text-sm font-medium text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis" id="locationStatusText">Locating...</span>
     </div>
 
     <!-- NAVIGATION PANEL (Green Bar - Fixed to Bottom) -->
@@ -315,7 +315,7 @@
             return R * c; // Distance in meters
         }
 
-        // --- NEW UTILITY FUNCTION: CARDINAL DIRECTION CONVERSION ---
+        // --- UTILITY FUNCTION: CARDINAL DIRECTION CONVERSION ---
         /**
          * Converts a numerical heading (0-360 degrees) into a cardinal direction string (e.g., "N", "SW").
          * @param {number} degrees - The heading in degrees.
@@ -337,7 +337,7 @@
             
             return directions[index % 16];
         }
-        // --- END NEW UTILITY FUNCTION ---
+        // --- END UTILITY FUNCTION ---
 
 
         // --- UPDATED: SENSOR DATA HANDLER (Now updates DOM directly for smoothness) ---
@@ -366,31 +366,20 @@
             if (magneticHeading !== null) {
                 currentSensorHeading = magneticHeading;
 
-                // --- NEW HIGH-FREQUENCY VISUAL UPDATE ---
-                // We rotate the arrow. CSS rotation starts at 0 degrees (Up/North).
-                // We rotate by 360 - heading so the tip points North.
-                const pointerRotation = magneticHeading; // Rotate by the heading value itself
-                const cardinal = getCardinalDirection(magneticHeading); // Get cardinal direction
+                // Apply rotation to the arrow
+                const pointerRotation = magneticHeading;
+                const cardinal = getCardinalDirection(magneticHeading);
                 
                 arrow.style.transform = `rotate(${pointerRotation}deg)`;
                 
+                // --- MODIFICATION: Simplified status text to only show heading ---
                 const headingText = `${cardinal} (${magneticHeading.toFixed(1)}°) (Compass)`;
                 
-                // Update the status text with the current heading
                 if (locationStatusText) {
-                    // Update only the heading part if other data (Lat/Lng) is present
-                    const currentText = locationStatusText.innerHTML;
-                    const headingIndex = currentText.indexOf('(Hdg:');
-                    
-                    if (headingIndex > -1) {
-                         // Extract the part before the heading and append the new heading
-                         locationStatusText.innerHTML = currentText.substring(0, headingIndex) + `(Hdg: ${headingText})`;
-                    } else {
-                        // Fallback if Lat/Lng not loaded yet
-                        locationStatusText.innerHTML = `Acquiring Location... (Hdg: ${headingText})`;
-                    }
+                    // Update the status text with the current heading only
+                    locationStatusText.innerHTML = `<span class="text-indigo-600 font-bold">${headingText}</span>`;
                 }
-                // --- END NEW VISUAL UPDATE ---
+                // --- END MODIFICATION ---
             }
         }
         
@@ -658,20 +647,18 @@
                 headingSource = "GPS";
             }
             
-            // --- UPDATED: Display both degrees and cardinal direction ---
+            // --- MODIFICATION: Display only the heading and cardinal direction ---
             const cardinalDirection = getCardinalDirection(displayHeading);
 
             const headingText = displayHeading !== null 
                                 ? `${cardinalDirection} (${displayHeading.toFixed(1)}°) (${headingSource})`
                                 : `N/A (${cardinalDirection}) (No sensor data)`;
             
-            // Update Status Bubble - Location and Heading
+            // Update Status Bubble - ONLY HEADING
             document.getElementById('locationStatusText').innerHTML = `
-                Lat: ${latitude.toFixed(4)}, 
-                Lng: ${longitude.toFixed(4)} 
-                <span class="text-indigo-400 ml-2">(Hdg: ${headingText})</span>
+                <span class="text-indigo-600 font-bold">${headingText}</span>
             `;
-            // --- END UPDATED ---
+            // --- END MODIFICATION ---
             
             // Handle tour progression and instruction updates
             checkTourProgress(newLatLong);
