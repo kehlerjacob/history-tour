@@ -56,13 +56,14 @@
 
         <div class="bg-indigo-700 rounded-lg p-3 flex items-center gap-4 w-full md:w-auto">
             <label for="radiusSlider" class="text-white text-sm font-medium whitespace-nowrap">Search Radius:</label>
-            <input type="range" id="radiusSlider" min="0.5" max="10" step="0.5" value="1" class="w-full md:w-48">
-            <span id="radiusValue" class="text-white font-bold text-sm w-16 text-right">1 mi</span>
+            <input type="range" id="radiusSlider" min="1" max="20" step="1" value="3" class="w-full md:w-48">
+            <span id="radiusValue" class="text-white font-bold text-sm w-16 text-right">3 mi</span>
         </div>
     </header>
 
     <!-- Map Container -->
-    <div id="map" class="flex-1 w-full relative z-0 bg-gray-200"></div>
+    <!-- Removed relative/z-0 to let Leaflet handle stacking context naturally -->
+    <div id="map" class="flex-1 w-full bg-gray-200"></div>
 
     <!-- Location Status -->
     <div id="locationStatus" class="fixed top-24 left-1/2 transform -translate-x-1/2 bg-white px-4 py-2 rounded-full shadow-lg z-[1000] flex items-center gap-2 transition-opacity duration-500 opacity-0 pointer-events-none">
@@ -71,7 +72,7 @@
     </div>
 
     <!-- Landmark Details Card -->
-    <div id="detailsCard" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-40 hidden flex items-center justify-center p-4" onclick="closeCard()">
+    <div id="detailsCard" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-[2000] hidden flex items-center justify-center p-4" onclick="closeCard()">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-md md:max-w-lg lg:max-w-2xl overflow-hidden transform transition-all duration-300 scale-100" onclick="event.stopPropagation()">
             <!-- Card Header -->
             <div class="p-5 border-b border-gray-100 flex justify-between items-start bg-indigo-50">
@@ -133,10 +134,10 @@
 
         // App State
         let map = null;
-        // Default to Washington D.C. for a guaranteed populated initial view
+        // Default to Washington D.C. (National Mall)
         let currentLat = 38.8893; 
         let currentLng = -77.0502;
-        let currentRadiusMiles = 1;
+        let currentRadiusMiles = 3; // Increased default radius
         let markersLayerGroup = null;
         let userLocationMarker = null;
         
@@ -177,13 +178,12 @@
                 dot.classList.add('bg-green-500', 'animate-pulse');
             }
 
-            setTimeout(() => { el.classList.add('opacity-0'); }, 3000);
+            setTimeout(() => { el.classList.add('opacity-0'); }, 4000);
         }
 
         function getUserLocation() {
             if (!navigator.geolocation) {
                 updateStatus("Geolocation not supported", true);
-                // Still load default D.C. landmarks
                 if (map) fetchNearbyLandmarks(); 
                 return;
             }
@@ -203,11 +203,10 @@
                 },
                 (error) => {
                     console.error("Location error:", error);
-                    updateStatus("Location access denied. Showing D.C.", true);
-                    // Fetch default location data anyway
+                    updateStatus("Location denied. Using Default (D.C.)", true);
                     if (map) fetchNearbyLandmarks(); 
                 },
-                { enableHighAccuracy: true }
+                { enableHighAccuracy: true, timeout: 10000 }
             );
         }
 
@@ -216,14 +215,15 @@
             if (userLocationMarker) map.removeLayer(userLocationMarker);
             
             const userIcon = window.L.divIcon({
-                className: 'bg-blue-600 border-2 border-white rounded-full shadow-lg',
+                className: 'bg-blue-600 border-2 border-white rounded-full shadow-xl',
                 iconSize: [16, 16],
                 html: ''
             });
             
             userLocationMarker = window.L.marker([currentLat, currentLng], {icon: userIcon})
                 .addTo(map)
-                .bindPopup("You are here");
+                .bindPopup("You are here")
+                .openPopup();
         }
 
         function getBoundingBox(lat, lng, radiusMiles) {
@@ -244,35 +244,39 @@
             updateStatus(`Searching within ${currentRadiusMiles} mile(s)...`);
 
             const bbox = getBoundingBox(currentLat, currentLng, currentRadiusMiles);
+            // Format: xmin,ymin,xmax,ymax (Lng, Lat, Lng, Lat)
             const bboxString = `${bbox.xmin},${bbox.ymin},${bbox.xmax},${bbox.ymax}`;
+            
             const baseUrl = "https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer/0/query";
             
-            // CRITICAL FIX: added inSR and outSR to ensure coordinate systems match (4326 = WGS84/GPS)
+            // Ensure we ask for GeoJSON with the correct spatial reference (WGS84 = 4326)
             const params = new URLSearchParams({
                 where: "1=1", 
                 geometry: bboxString,
                 geometryType: "esriGeometryEnvelope",
                 spatialRel: "esriSpatialRelIntersects",
                 inSR: "4326",
-                outSR: "4326",
+                outSR: "4326", 
                 outFields: "RESNAME,NRIS_Refnum,LISTED_DATE,ADDRESS,CITY,STATE",
                 returnGeometry: "true",
                 f: "geojson", 
-                resultRecordCount: "50" 
+                resultRecordCount: "100" // Limit to 100 to avoid overload
             });
 
+            const url = `${baseUrl}?${params.toString()}`;
+            console.log("Querying NPS API:", url); // Debugging log
+
             try {
-                const response = await fetch(`${baseUrl}?${params.toString()}`);
+                const response = await fetch(url);
                 if (!response.ok) throw new Error("NPS API request failed");
                 
                 const data = await response.json();
                 
-                // Check if features exist and is an array
-                if (data && data.features && data.features.length > 0) {
+                if (data.features && data.features.length > 0) {
                     displayLandmarks(data.features);
-                    updateStatus(`Found ${data.features.length} official registers`);
+                    updateStatus(`Found ${data.features.length} sites`);
                 } else {
-                    console.warn("NPS Data:", data);
+                    console.warn("No features returned:", data);
                     updateStatus("No historic sites found nearby", true);
                     if (markersLayerGroup) markersLayerGroup.clearLayers();
                 }
@@ -285,22 +289,26 @@
         function displayLandmarks(features) {
             if (!map) return;
             
-            if (markersLayerGroup) {
-                markersLayerGroup.clearLayers();
-            } else {
+            // Re-initialize layer group if missing
+            if (!markersLayerGroup) {
                 markersLayerGroup = window.L.layerGroup().addTo(map);
+            } else {
+                markersLayerGroup.clearLayers();
             }
 
-            // Using inline styles for fill/stroke to ensure visibility even if Tailwind is slow to parse
+            // Icon styling with hardcoded colors
             const historicIcon = window.L.divIcon({
                 className: 'bg-transparent',
-                html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32" fill="#3730a3" stroke="white" stroke-width="1" class="drop-shadow-md"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm0 8.625a1.125 1.125 0 100 2.25 1.125 1.125 0 000-2.25zM15.375 12a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM7.5 10.5a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zm10.5-1.5a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5z" clip-rule="evenodd" /></svg>`,
+                html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32" fill="#4f46e5" stroke="#ffffff" stroke-width="2" style="filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.3));"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm0 8.625a1.125 1.125 0 100 2.25 1.125 1.125 0 000-2.25zM15.375 12a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM7.5 10.5a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zm10.5-1.5a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5z" clip-rule="evenodd" /></svg>`,
                 iconSize: [32, 32],
                 iconAnchor: [16, 32],
                 popupAnchor: [0, -32]
             });
 
             features.forEach(feature => {
+                // Safety check for geometry
+                if (!feature.geometry || !feature.geometry.coordinates) return;
+
                 const coords = feature.geometry.coordinates;
                 const props = feature.properties;
                 
@@ -314,11 +322,11 @@
 
                 const marker = window.L.marker([lat, lng], { icon: historicIcon })
                     .bindPopup(
-                        `<div class="text-center">
-                            <h4 class="font-bold text-indigo-700 mb-1">${name}</h4>
-                            <button class="block w-full mt-2 text-sm text-white bg-indigo-500 hover:bg-indigo-600 px-3 py-1 rounded shadow-sm transition" 
+                        `<div class="text-center p-2">
+                            <h4 class="font-bold text-indigo-700 mb-2 text-sm">${name}</h4>
+                            <button class="block w-full text-xs text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-2 rounded shadow transition font-medium" 
                                 onclick="openCard('${id}')">
-                                View Official Record
+                                View Details
                             </button>
                         </div>`
                     );
@@ -332,6 +340,7 @@
         function initMap() {
             if (map) return;
             
+            // Polling check for Leaflet
             if (typeof window.L === 'undefined' || !window.L.map) {
                 setTimeout(initMap, 100);
                 return;
@@ -342,13 +351,15 @@
             map = window.L.map('map').setView([currentLat, currentLng], 14);
             map.invalidateSize();
 
-            // Use CartoDB Positron tiles for a simpler style
+            // CartoDB Positron (Simplified map style)
             window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                maxZoom: 19
             }).addTo(map);
 
             markersLayerGroup = window.L.layerGroup().addTo(map);
 
+            // Start location search
             getUserLocation();
 
             setTimeout(() => map.invalidateSize(), 250);
@@ -368,16 +379,14 @@
             fetchNearbyLandmarks();
         });
 
-        // --- CARD LOGIC (NO AI) ---
+        // --- CARD LOGIC ---
 
-        // Expose openCard to global scope for popup buttons
         window.openCard = function(id) {
             const data = landmarksStore[id];
             if (!data) return;
 
             const card = document.getElementById('detailsCard');
             
-            // Populate Data
             document.getElementById('cardTitle').textContent = data.RESNAME || "Unknown Name";
             document.getElementById('cardRefNum').textContent = `Reference #: ${data.NRIS_Refnum}`;
             
@@ -411,7 +420,13 @@
         }
 
         document.addEventListener('DOMContentLoaded', initializeFirebase);
-        initMap();
+        
+        // Ensure map tries to load
+        if (document.readyState === "complete" || document.readyState === "interactive") {
+            setTimeout(initMap, 100);
+        } else {
+            document.addEventListener("DOMContentLoaded", initMap);
+        }
 
     </script>
 </body>
