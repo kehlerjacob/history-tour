@@ -174,8 +174,8 @@
         // ORS_API_KEY is configured for the tour feature.
         const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6Ijg1ZWRmZjY2Y2VkZTRkOWVhMmI4NDliNTMxOThhYTY0IiwiaCI6Im11cm11cjY0In0="; 
         
-        // FIX: Change to the generic directions endpoint, expecting the profile in the JSON body.
-        const ORS_URL = "https://api.openrouteservice.org/v2/directions/geojson";
+        // FIX: Reverting to the specific profile endpoint and removing profile from body to resolve the "incorrect value" error.
+        const ORS_URL = "https://api.openrouteservice.org/v2/directions/walking/geojson";
 
 
         // App State
@@ -585,8 +585,7 @@ out center;
             // 4. Construct the ORS payload 
             const orsPayload = {
                 coordinates: coords,
-                // FIX: Adding profile back, as the URL is now generic.
-                profile: 'walking', 
+                // Removed 'profile': 'walking' to rely solely on the ORS_URL endpoint definition.
                 options: {
                     round_trip: { 
                         points: pointsToUse.length + 1, // Number of stops (user + landmarks)
