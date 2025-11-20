@@ -548,29 +548,33 @@
             document.getElementById('navStepCounter').textContent = `${currentTourStep}/${tourRoute.length - 1}`;
 
             if (currentTourStep === 0) {
-                // Initial step: Check-in at start point (user location)
-                document.getElementById('currentNavInstruction').textContent = "Tour Ready: Start Moving!";
-                document.getElementById('nextLandmarkInfo').textContent = `Your tour begins now. Head towards the first landmark.`;
-                document.getElementById('navActionButton').textContent = "Next Landmark";
-                document.getElementById('navActionButton').disabled = true; // Disabled until arrival
+                // Step 0: Initial state - user is at the starting point. Button MUST be enabled to advance.
+                const nextStop = tourRoute[1];
+                document.getElementById('currentNavInstruction').textContent = "Tour Ready: Welcome!";
+                document.getElementById('nextLandmarkInfo').innerHTML = `Press 'Start Navigation' to proceed to your first stop: <span class="font-bold">${nextStop.title}</span>.`;
+                document.getElementById('navActionButton').textContent = "Start Navigation";
+                document.getElementById('navActionButton').disabled = false; // FIX: Button enabled to advance to first stop
+                
+                // Pan map to the first actual destination
+                map.panTo([nextStop.lat, nextStop.lon]);
             } else if (currentTourStep < tourRoute.length) {
-                // Mid-tour step
-                const currentStop = tourRoute[currentTourStep];
+                // Mid-tour steps (currentTourStep is the landmark we are tracking towards)
+                const target = tourRoute[currentTourStep];
                 const nextStop = tourRoute[currentTourStep + 1];
                 
-                document.getElementById('currentNavInstruction').textContent = `Landmark ${currentTourStep}: ${currentStop.title || 'Start Point'}`;
+                document.getElementById('currentNavInstruction').textContent = `Landmark ${currentTourStep}: ${target.title}`;
                 
-                let nextText = `Next Stop: ${nextStop ? nextStop.title : 'Tour Complete!'}`;
-                if (currentStop.isWiki) {
-                    nextText += ` <a href="${currentStop.url}" target="_blank" class="text-white underline hover:text-green-200">(Wiki Info)</a>`;
+                let nextText = `Next Stop: <span class="font-bold">${nextStop ? nextStop.title : 'Tour Complete!'}</span>`;
+                if (target.isWiki) {
+                    nextText += ` <a href="${target.url}" target="_blank" class="text-white underline hover:text-green-200">(Wiki Info)</a>`;
                 }
 
                 document.getElementById('nextLandmarkInfo').innerHTML = nextText;
-                document.getElementById('navActionButton').textContent = "Next Landmark";
-                document.getElementById('navActionButton').disabled = true; 
+                document.getElementById('navActionButton').textContent = "Next Stop";
+                document.getElementById('navActionButton').disabled = true; // Disabled until arrival, enabled by checkTourProgress
                 
-                // Pan map to current stop
-                map.panTo([currentStop.lat, currentStop.lon]);
+                // Pan map to current target
+                map.panTo([target.lat, target.lon]);
             } else {
                 // Tour finished
                 document.getElementById('currentNavInstruction').textContent = "Tour Completed!";
@@ -595,7 +599,8 @@
         }
 
         const checkTourProgress = (userLatLong) => {
-            if (!tourRoute || currentTourStep >= tourRoute.length) return;
+            // FIX: Skip distance check if we are at the start point (step 0)
+            if (!tourRoute || currentTourStep >= tourRoute.length || currentTourStep === 0) return;
 
             const target = tourRoute[currentTourStep];
             const distanceToTarget = getDistance(userLatLong[0], userLatLong[1], target.lat, target.lon);
@@ -603,12 +608,13 @@
 
             if (distanceToTarget < arrivalThreshold) {
                 document.getElementById('navActionButton').disabled = false;
-                document.getElementById('currentNavInstruction').textContent = `ARRIVED: ${target.title || 'Start Point'}`;
+                document.getElementById('currentNavInstruction').textContent = `ARRIVED: ${target.title || 'Landmark'}`;
                 document.getElementById('nextLandmarkInfo').textContent = `You have arrived at this location. Press 'Next Stop' to continue the tour.`;
             } else {
                 const distanceKm = (distanceToTarget / 1000).toFixed(2);
                 document.getElementById('navActionButton').disabled = true;
-                if (currentTourStep > 0) {
+                // Only show distance tracking if we are on a step that is a landmark (currentTourStep >= 1)
+                if (currentTourStep > 0) { 
                      document.getElementById('nextLandmarkInfo').textContent = `Distance to ${target.title}: ${distanceKm} km.`;
                 }
             }
