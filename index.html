@@ -3,168 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Historic Landmark Map</title>
+    <title>Localized AI Assistant</title>
+    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-    
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-        
+        /* Custom styles for dark theme and typography */
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f7f9fc;
+            background-color: #1a1a2e; /* Dark background */
+            color: #e0e0e0; /* Light text */
         }
-        .leaflet-container {
-            font-family: 'Inter', sans-serif;
+        .container {
+            max-width: 800px;
         }
-        /* Custom styles for the map pin images loaded by Leaflet's default marker logic */
-        .leaflet-default-icon-path {
-            background-image: url('https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png');
+        .card {
+            background-color: #2c2c54; /* Darker card background */
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2);
+            border: 1px solid #4a4a75;
         }
-        input[type=range] {
-            -webkit-appearance: none; 
-            background: transparent; 
+        .btn-primary {
+            background-color: #4CAF50; /* Green submit button */
+            transition: all 0.2s;
         }
-        input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            height: 16px;
-            width: 16px;
+        .btn-primary:hover {
+            background-color: #45a049;
+            transform: translateY(-1px);
+        }
+        .btn-location {
+            background-color: #3b3b6b;
+            color: #e0e0e0;
+            transition: all 0.2s;
+            border: 1px solid #4a4a75;
+        }
+        .btn-location:hover {
+            background-color: #4a4a75;
+        }
+        .btn-location.active {
+            background-color: #ff6347; /* Tomato red for active location */
+            color: white;
+            border-color: #ff6347;
+            font-weight: bold;
+        }
+        /* Simple spinner CSS */
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #4CAF50;
             border-radius: 50%;
-            background: #ffffff;
-            cursor: pointer;
-            margin-top: -6px; 
-            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
         }
-        input[type=range]::-webkit-slider-runnable-track {
-            width: 100%;
-            height: 4px;
-            cursor: pointer;
-            background: #a5b4fc; 
-            border-radius: 2px;
-        }
-
-        /* Ensure the custom arrow marker is positioned correctly by Leaflet */
-        .user-arrow-marker {
-            /* Leaflet sets position, we ensure the content inside is centered */
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
-</head>
-<body class="flex flex-col h-screen overflow-hidden">
-
-    <!-- Header -->
-    <header class="bg-indigo-600 shadow-xl z-50 p-4 flex flex-col md:flex-row items-center justify-between gap-4 flex-none">
-        <div>
-            <h1 class="text-2xl font-bold text-white">Historic Places Explorer</h1>
-            <p class="text-indigo-200 text-sm">OpenStreetMap Data (via Overpass)</p>
-        </div>
-
-        <!-- Search Controls -->
-        <div class="flex flex-wrap items-center justify-center gap-4">
-             <div class="bg-indigo-700 rounded-lg p-3 flex items-center gap-4 w-full md:w-auto">
-                <label for="radiusSlider" class="text-white text-sm font-medium whitespace-nowrap">Search Radius:</label>
-                <input type="range" id="radiusSlider" min="1" max="20" step="1" value="10" class="w-full md:w-48">
-                <span id="radiusValue" class="text-white font-bold text-sm w-16 text-right">10 mi</span>
-
-                <button id="compassPermissionButton" class="bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-bold py-2 px-3 rounded-lg shadow transition whitespace-nowrap hidden">
-                    Enable Compass
-                </button>
-            </div>
-            
-            <!-- Tour Button -->
-            <button id="startTourButton" onclick="openTourPanel()" class="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold py-3 px-4 rounded-lg shadow transition whitespace-nowrap">
-                Start Tour
-            </button>
-        </div>
-    </header>
-
-    <!-- Tour Panel (Hidden by default) -->
-    <div id="tourPanel" class="hidden absolute top-[6rem] right-4 bg-white p-4 rounded-xl shadow-2xl z-[1500] w-72">
-        <h3 class="font-bold text-lg text-indigo-700 mb-3 flex justify-between items-center">
-            Create Walking Tour
-            <button onclick="document.getElementById('tourPanel').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </button>
-        </h3>
-        <label for="tourDistance" class="block text-sm font-medium text-gray-700 mb-1">Desired Total Distance (Miles):</label>
-        <div class="flex gap-2">
-            <!-- Distance input is now used to filter which pins are included in the tour -->
-            <input type="number" id="tourDistance" min="1" max="15" value="5" step="0.5" class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5">
-            <button onclick="createTour()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition flex-shrink-0">
-                Create
-            </button>
-        </div>
-        <p id="tourStatus" class="text-xs mt-2 text-gray-500">Filters pins by distance and connects up to 7 closest stops for a loop tour.</p>
-    </div>
-
-    <!-- Map Container -->
-    <div id="map" class="flex-1 w-full bg-gray-200"></div>
-
-    <!-- Location Status -->
-    <div id="locationStatus" class="fixed top-24 left-1/2 transform -translate-x-1/2 bg-white px-4 py-2 rounded-full shadow-lg z-[1000] flex items-center gap-2 transition-opacity duration-500 opacity-0 pointer-events-none">
-        <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-        <span class="text-sm font-medium text-gray-700" id="locationStatusText">Locating...</span>
-    </div>
-
-    <!-- Landmark Details Card (Adjusted for generic OSM data) -->
-    <div id="detailsCard" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-[2000] hidden flex items-center justify-center p-4" onclick="closeCard()">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md md:max-w-lg lg:max-w-2xl overflow-hidden transform transition-all duration-300 scale-100" onclick="event.stopPropagation()">
-            <!-- Card Header -->
-            <div class="p-5 border-b border-gray-100 flex justify-between items-start bg-indigo-50">
-                <div>
-                    <h2 id="cardTitle" class="text-xl md:text-2xl font-extrabold text-gray-800">OSM Feature Details</h2>
-                    <p id="cardRefNum" class="text-sm text-indigo-500 font-medium mt-1"></p>
-                </div>
-                <button onclick="closeCard()" class="text-gray-400 hover:text-gray-600 transition">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>
-            </div>
-            
-            <!-- Card Body -->
-            <div class="p-5 max-h-[70vh] overflow-y-auto">
-                <div id="cardContent" class="space-y-6">
-                    
-                    <!-- Official Data Section -->
-                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                        <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">OpenStreetMap Tags</h3>
-                        <div class="grid grid-cols-1 gap-y-4" id="dataTags">
-                            <!-- Tags will be injected here -->
-                            <div>
-                                <p class="text-xs text-gray-500">Type</p>
-                                <p id="dataType" class="text-sm font-semibold text-gray-800">-</p>
-                            </div>
-                            <div>
-                                <p class="text-xs text-gray-500">Latitude, Longitude</p>
-                                <p id="dataCoords" class="text-sm font-semibold text-gray-800">-</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="text-center">
-                         <a id="osmLink" href="#" target="_blank" class="inline-flex items-center justify-center w-full px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition">
-                            View on OpenStreetMap
-                            <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
-                        </a>
-                        <p class="text-xs text-gray-400 mt-2">Opens the OpenStreetMap details for this feature.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
+    <!-- Firebase SDK Imports -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Global variables provided by the environment
+        // Global variables provided by the environment (MANDATORY USE)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
@@ -172,663 +72,271 @@
         let app, db, auth;
         let userId = null;
 
-        // Configuration 
-        // ORS_API_KEY is configured for the tour feature.
-        const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6Ijg1ZWRmZjY2Y2VkZTRkOWVhMmI4NDliNTMxOThhYTY0IiwiaCI6Im11cm11cjY0In0="; 
-        
-        // ORS URL Base without profile/geojson, which will be injected dynamically
-        const ORS_URL_BASE = "https://api.openrouteservice.org/v2/directions";
-        const ORS_PROFILE = "foot-walking"; // Mandatory profile as per user request
+        window.firebaseReady = false;
 
-
-        // App State
-        let map = null;
-        let currentHeading = 0; 
-        // Default to Washington D.C. (National Mall)
-        let currentLat = 38.8893; 
-        let currentLng = -77.0502;
-        // Increased default radius to 10 miles for better chance of finding landmarks
-        let currentRadiusMiles = 10; 
-        let markersLayerGroup = null;
-        let routeLayerGroup = null; // New layer for the tour route
-        let userLocationMarker = null; 
-        let searchRadiusCircle = null; 
-        const MILES_TO_METERS = 1609.34; 
-        const MILES_TO_KM = 1.60934;
-        
-        const landmarksStore = {};
-        let isCompassInitialized = false; // New state to prevent double initialization
-
-        // --- FIREBASE SETUP ---
-        function initializeFirebase() {
-            if (Object.keys(firebaseConfig).length > 0) {
+        const initFirebase = async () => {
+            try {
+                if (Object.keys(firebaseConfig).length === 0) {
+                    console.warn("Firebase config is empty. Proceeding without full Firebase initialization.");
+                    window.firebaseReady = true;
+                    return;
+                }
+                
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
-                onAuthStateChanged(auth, async (user) => {
-                    if (!user) {
-                        try {
-                            if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken);
-                            else await signInAnonymously(auth);
-                        } catch (e) { console.error(e); }
-                    }
-                });
-            }
-        }
-
-        // --- GEOLOCATION & ORIENTATION UTILS ---
-
-        function updateStatus(msg, isError = false, isContinuous = false, targetId = 'locationStatus') {
-            const el = document.getElementById(targetId);
-            if (!el) return; // For tourStatus, the element might not have a dot/text children setup
-
-            const isLocationStatus = targetId === 'locationStatus';
-
-            if (isLocationStatus) {
-                const text = document.getElementById('locationStatusText');
-                const dot = el.querySelector('div');
-                text.textContent = msg;
-
-                if (isError) {
-                    dot.classList.remove('bg-green-500', 'animate-pulse');
-                    dot.classList.add('bg-red-500');
-                } else {
-                    dot.classList.remove('bg-red-500');
-                    dot.classList.add('bg-green-500', 'animate-pulse');
-                }
-
-                el.classList.remove('opacity-0', 'pointer-events-none');
-                if (!isContinuous) {
-                    setTimeout(() => { el.classList.add('opacity-0', 'pointer-events-none'); }, 4000);
-                }
-            } else { // Handle tourStatus
-                el.textContent = msg;
-                el.classList.remove('text-gray-500', 'text-red-500', 'text-green-500');
-                if (isError) {
-                    el.classList.add('text-red-500');
-                } else if (isContinuous) {
-                    el.classList.add('text-gray-500');
-                } else {
-                    el.classList.add('text-green-500');
-                }
-            }
-        }
-        
-        function updateMarkerRotation(heading) {
-            if (userLocationMarker) {
-                const markerElement = userLocationMarker.getElement();
-                const svg = markerElement ? markerElement.querySelector('svg') : null;
                 
-                if (svg) {
-                    // We rotate the SVG element that contains the arrow based on the magnetic heading.
-                    svg.style.transform = `rotate(${heading}deg)`;
+                // Sign in with custom token or anonymously
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
                 }
-            }
-        }
 
-        function addUserMarker() {
-            if (!map) return;
-            if (userLocationMarker) map.removeLayer(userLocationMarker);
-            
-            // Custom Arrow Icon HTML (filled triangle pointing up)
-            const arrowSVG = `
-                <div style="background-color: white; border-radius: 50%; padding: 5px; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
-                    <svg viewBox="0 0 100 100" fill="#4f46e5" class="w-full h-full" style="width: 20px; height: 20px; transition: transform 0.1s ease-out;">
-                        <!-- Triangle path pointing up -->
-                        <path d="M50 10 L 90 90 L 10 90 Z" />
-                    </svg>
-                </div>
-            `;
-
-            const userIcon = window.L.divIcon({
-                className: 'user-arrow-marker',
-                iconSize: [40, 40], 
-                iconAnchor: [20, 20], 
-                html: arrowSVG
-            });
-            
-            userLocationMarker = window.L.marker([currentLat, currentLng], {
-                icon: userIcon,
-                zIndexOffset: 1000 // Ensure user marker is above others
-            }).addTo(map)
-              .bindPopup("Your Location & Heading");
-            
-            updateMarkerRotation(currentHeading);
-        }
-        
-        function startOrientationTracking() {
-            if (isCompassInitialized) return;
-            isCompassInitialized = true;
-
-            if (window.DeviceOrientationEvent) {
-                window.addEventListener('deviceorientation', (event) => {
-                    let heading = null;
-                    
-                    if (event.webkitCompassHeading) {
-                        // iOS/Safari uses webkitCompassHeading (true North)
-                        heading = event.webkitCompassHeading; 
-                    } else if (event.alpha !== null) {
-                        // Standard alpha (magnetic North). 360 - alpha is needed to get 
-                        // a standard compass heading (0=N, 90=E, 180=S, 270=W).
-                        heading = 360 - event.alpha;
-                    }
-
-                    if (heading !== null && Math.abs(heading - currentHeading) > 1) { 
-                        currentHeading = heading;
-                        updateStatus(`Loc: (${currentLat.toFixed(4)}, ${currentLng.toFixed(4)}) | Heading: ${currentHeading.toFixed(0)}°`, false, true); 
-                        updateMarkerRotation(currentHeading);
-                    }
-                }, false);
-            } else {
-                console.warn("DeviceOrientationEvent not supported. Heading arrow rotation disabled.");
-                updateStatus("Compass feature unsupported on this device/browser.", true, true);
-            }
-        }
-
-        async function requestCompassPermission() {
-            const button = document.getElementById('compassPermissionButton');
-            button.disabled = true;
-
-            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try {
-                    const permissionState = await DeviceOrientationEvent.requestPermission();
-                    if (permissionState === 'granted') {
-                        startOrientationTracking();
-                        button.textContent = 'Compass Active';
-                        button.classList.remove('bg-indigo-500', 'hover:bg-indigo-400');
-                        button.classList.add('bg-green-600');
-                        updateStatus("Compass activated!", false);
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        console.log("User signed in. UID:", userId);
+                        window.firebaseReady = true;
                     } else {
-                        updateStatus("Compass permission denied. Please check device settings.", true);
-                        button.textContent = 'Permission Denied';
-                        button.classList.remove('bg-indigo-500', 'hover:bg-indigo-400');
-                        button.classList.add('bg-red-500', 'hover:bg-red-400');
+                        userId = crypto.randomUUID();
+                        console.log("User signed out or anonymous. Generated temp ID:", userId);
+                        window.firebaseReady = true;
                     }
-                } catch (error) {
-                    console.error("Error requesting orientation permission:", error);
-                    updateStatus("Error requesting compass permission.", true);
-                    button.textContent = 'Error';
-                    button.classList.remove('bg-indigo-500');
-                    button.classList.add('bg-red-500');
-                }
-            } else {
-                startOrientationTracking();
-                button.textContent = 'Compass Active';
-                button.classList.remove('bg-indigo-500', 'hover:bg-indigo-400', 'hidden');
-                button.classList.add('bg-green-600');
-                updateStatus("Compass started automatically.", false);
+                    // Attach global instances for use in the main script block if needed
+                    window.db = db;
+                    window.auth = auth;
+                    window.userId = userId;
+                    window.appId = appId;
+                });
+            } catch (error) {
+                console.error("Firebase initialization or sign-in failed:", error);
+                window.firebaseReady = true; // Still allow app to run, just without Firebase features
             }
-            button.disabled = false;
-        }
+        };
 
-        function startPermissionCheck() {
-            const button = document.getElementById('compassPermissionButton');
-            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                button.classList.remove('hidden');
-                button.addEventListener('click', requestCompassPermission);
-                updateStatus("Tap 'Enable Compass' to see your heading.", false, true);
-            } else {
-                startOrientationTracking();
-            }
-        }
+        initFirebase();
+    </script>
+</head>
+<body class="p-4 md:p-8 min-h-screen flex items-start justify-center">
+
+    <div id="app" class="container w-full p-6 space-y-6 card rounded-xl">
+        <h1 class="text-3xl font-bold text-center text-white mb-6">
+            <span class="text-[#ff6347]">Local</span> Gemini Assistant
+        </h1>
+        <p class="text-center text-sm text-gray-400">
+            Ask a question and the AI will tailor its answer based on your selected location.
+        </p>
+
+        <!-- Location Selection -->
+        <div class="space-y-3">
+            <label class="block text-md font-medium text-gray-300">Choose Context Location:</label>
+            <div id="location-buttons" class="flex flex-wrap gap-2">
+                <!-- Buttons will be injected here by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Query Input -->
+        <div class="space-y-3">
+            <label for="user-query" class="block text-md font-medium text-gray-300">Your Query:</label>
+            <textarea id="user-query" rows="3" class="w-full p-3 rounded-lg bg-[#1a1a2e] border border-[#4a4a75] text-white focus:ring-2 focus:ring-[#ff6347] focus:border-[#ff6347] resize-none" placeholder="e.g., 'What are the best places for lunch nearby?'"></textarea>
+            <button id="submit-btn" class="w-full btn-primary text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center">
+                <span id="submit-text">Ask Gemini</span>
+                <div id="loading-spinner" class="spinner hidden ml-3"></div>
+            </button>
+        </div>
+
+        <!-- Response Area -->
+        <div id="response-card" class="hidden space-y-4 pt-4 border-t border-[#4a4a75]">
+            <h2 class="text-xl font-semibold text-white">AI Response for <span id="context-location-display" class="text-[#ff6347]"></span></h2>
+            <div id="ai-response" class="p-4 rounded-lg bg-[#1a1a2e] whitespace-pre-wrap text-gray-200 leading-relaxed">
+                <!-- AI generated text will appear here -->
+            </div>
+            <div id="citations" class="text-xs text-gray-400 space-y-1">
+                <!-- Citations will appear here -->
+            </div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="error-message" class="hidden text-center p-4 rounded-lg bg-red-900/50 text-red-300 border border-red-700">
+            An error occurred. Please try again.
+        </div>
+    </div>
+
+    <script type="module">
+        // API Configuration
+        const API_MODEL = "gemini-2.5-flash-preview-09-2025";
+        const API_KEY = ""; // Canvas runtime provides the key
+
+        // Global state
+        let currentLocation = "Midtown Manhattan, New York, NY";
+
+        // DOM Elements
+        const locationButtonsContainer = document.getElementById('location-buttons');
+        const userQueryInput = document.getElementById('user-query');
+        const submitButton = document.getElementById('submit-btn');
+        const submitText = document.getElementById('submit-text');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const responseCard = document.getElementById('response-card');
+        const aiResponseDiv = document.getElementById('ai-response');
+        const citationsDiv = document.getElementById('citations');
+        const contextLocationDisplay = document.getElementById('context-location-display');
+        const errorMessageDiv = document.getElementById('error-message');
+
+        // Available Locations (Including the requested Midtown Manhattan)
+        const LOCATIONS = [
+            "Midtown Manhattan, New York, NY",
+            "Palo Alto, California",
+            "London, UK",
+            "Tokyo, Japan",
+            "Paris, France",
+        ];
+
+        // --- Location Selector Logic ---
+
+        const renderLocationButtons = () => {
+            locationButtonsContainer.innerHTML = '';
+            LOCATIONS.forEach(location => {
+                const button = document.createElement('button');
+                button.textContent = location.split(',')[0]; // Display city/area name
+                button.className = `btn-location py-2 px-4 rounded-full text-sm font-medium ${location === currentLocation ? 'active' : ''}`;
+                button.onclick = () => {
+                    currentLocation = location;
+                    renderLocationButtons(); // Re-render to update active state
+                    console.log("Context location set to:", currentLocation);
+                };
+                locationButtonsContainer.appendChild(button);
+            });
+        };
+
+        // Initialize location buttons on load
+        renderLocationButtons();
 
 
-        function getUserLocation() {
-            if (!navigator.geolocation) {
-                updateStatus("Geolocation not supported", true);
-                if (map) fetchNearbyLandmarks(); 
-                return;
-            }
-            
-            updateStatus("Finding location...");
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    currentLat = position.coords.latitude;
-                    currentLng = position.coords.longitude;
-                    updateStatus("Location found!");
-                    
-                    if (map) {
-                        map.setView([currentLat, currentLng], 14);
-                        addUserMarker(); 
-                        fetchNearbyLandmarks();
-                    }
+        // --- Gemini API Function with Exponential Backoff ---
+
+        /**
+         * Fetches a response from the Gemini API with Google Search grounding.
+         * Implements exponential backoff for retries.
+         * @param {string} prompt The user query combined with the location context.
+         * @param {number} retries Current retry count.
+         */
+        async function fetchGeminiResponse(prompt, retries = 0) {
+            const maxRetries = 5;
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${API_MODEL}:generateContent?key=${API_KEY}`;
+            const systemPrompt = "You are a highly capable and localized AI assistant. Your response must be based on the provided location context. Use Google Search grounding to ensure factual accuracy and timeliness. Provide a conversational, helpful, and concise answer, focusing on the selected location.";
+
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                tools: [{ "google_search": {} }], // Enable Google Search grounding
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
                 },
-                (error) => {
-                    console.error("Location error:", error);
-                    updateStatus("Location denied. Using Default (D.C.)", true);
-                    if (map) fetchNearbyLandmarks(); 
-                },
-                { enableHighAccuracy: true, timeout: 10000 }
-            );
-        }
-        
-        function getBoundingBox(lat, lng, radiusMiles) {
-            const latChange = radiusMiles / 69.0;
-            const lngChange = radiusMiles / (69.0 * Math.cos(lat * Math.PI / 180));
-            
-            const precision = 4; 
-            
-            return {
-                xmin: (lng - lngChange).toFixed(precision), // Lng West
-                ymin: (lat - latChange).toFixed(precision), // Lat South
-                xmax: (lng + lngChange).toFixed(precision), // Lng East
-                ymax: (lat + latChange).toFixed(precision) // Lat North
             };
-        }
-
-        async function fetchNearbyLandmarks() {
-            if (!map) return;
-            
-            console.log(`DEBUG: Starting search at Lat: ${currentLat}, Lng: ${currentLng} with Radius: ${currentRadiusMiles} miles.`);
-
-            const radiusMeters = currentRadiusMiles * MILES_TO_METERS;
-            if (searchRadiusCircle) {
-                searchRadiusCircle.setLatLng([currentLat, currentLng]).setRadius(radiusMeters);
-            } else {
-                searchRadiusCircle = window.L.circle([currentLat, currentLng], {
-                    color: 'indigo',
-                    fillColor: '#818cf8',
-                    fillOpacity: 0.1,
-                    radius: radiusMeters
-                }).addTo(map);
-            }
-            
-            addUserMarker();
-
-            updateStatus(`Searching within ${currentRadiusMiles} mile(s) centered at (${currentLat.toFixed(4)}, ${currentLng.toFixed(4)})...`);
-
-            const bbox = getBoundingBox(currentLat, currentLng, currentRadiusMiles);
-
-            // Format for Overpass QL: (south, west, north, east) -> (ymin, xmin, ymax, xmax)
-            const overpassBbox = `${bbox.ymin},${bbox.xmin},${bbox.ymax},${bbox.xmax}`;
-            
-            const baseUrl = "https://overpass-api.de/api/interpreter";
-            
-            // Overpass Query Language (QL) query to find historical objects
-            const overpassQuery = `
-[out:json][timeout:25];
-// Search for nodes, ways, and relations tagged as historic=*
-(
-  node[historic](${overpassBbox});
-  way[historic](${overpassBbox});
-  rel[historic](${overpassBbox});
-);
-// Print all results, using 'center' for ways/relations to get a single point coordinate
-out center;
-`;
 
             try {
-                const response = await fetch(baseUrl, {
+                const response = await fetch(apiUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `data=${encodeURIComponent(overpassQuery)}`
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
                 });
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`Overpass API request failed with status ${response.status}. Response: ${errorText.substring(0, 100)}...`);
-                }
-                
-                const data = await response.json();
-                
-                if (data.elements && data.elements.length > 0) {
-                    displayLandmarks(data.elements);
-                    updateStatus(`Found ${data.elements.length} historic sites`);
-                } else {
-                    updateStatus("No historic sites found nearby in OpenStreetMap", true);
-                    if (markersLayerGroup) markersLayerGroup.clearLayers();
-                }
-            } catch (error) {
-                console.error("General Error fetching landmarks:", error);
-                updateStatus(`Error connecting to OpenStreetMap: ${error.message.substring(0, 50)}...`, true);
-            }
-        }
 
-        function displayLandmarks(elements) {
-            if (!map) return;
-            
-            if (!markersLayerGroup) {
-                markersLayerGroup = window.L.layerGroup().addTo(map);
-            } else {
-                markersLayerGroup.clearLayers();
-            }
-            
-            // Clear the store but keep the current location/heading data
-            for (const key in landmarksStore) {
-                if (landmarksStore.hasOwnProperty(key)) {
-                    delete landmarksStore[key];
-                }
-            }
-
-            elements.forEach(element => {
-                const lat = element.lat; 
-                const lng = element.lon; 
-                const tags = element.tags || {};
-                
-                if (typeof lat === 'undefined' || typeof lng === 'undefined') return;
-
-                const id = `${element.type}-${element.id}`;
-                
-                // Store landmark with distance from user (simple straight line distance for initial sorting)
-                const dLat = (lat - currentLat) * 69.0;
-                const dLng = (lng - currentLng) * (69.0 * Math.cos(currentLat * Math.PI / 180));
-                const distanceMiles = Math.sqrt(dLat * dLat + dLng * dLng);
-
-                landmarksStore[id] = { ...element, distanceMiles };
-
-                const name = tags.name || tags.historic || `${element.type} ${element.id}`;
-
-                const marker = window.L.marker([lat, lng]) 
-                    .bindPopup(
-                        `<div class="text-center p-2">
-                            <h4 class="font-bold text-indigo-700 mb-2 text-sm">${name}</h4>
-                            <p class="text-xs text-gray-500 mb-2">Distance: ${distanceMiles.toFixed(2)} mi</p>
-                            <button class="block w-full text-xs text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-2 rounded shadow transition font-medium" 
-                                onclick="openCard('${id}')">
-                                View Details
-                            </button>
-                        </div>`
-                    );
-                
-                markersLayerGroup.addLayer(marker);
-            });
-        }
-
-        // --- TOUR LOGIC ---
-
-        window.openTourPanel = function() {
-            const panel = document.getElementById('tourPanel');
-            panel.classList.toggle('hidden');
-            if (!panel.classList.contains('hidden')) {
-                 updateStatus("Enter your desired walking distance.", false, false, 'tourStatus');
-            }
-        }
-        
-        // Helper function to call the ORS API for a given set of coordinates
-        async function getOrsRouteDistance(coords) {
-             // Route MUST be: Start -> Closest_L1 -> Closest_L2 -> ... -> Closest_LN -> Start (Loop)
-            const routeCoords = [
-                [currentLng, currentLat], // Start
-                ...coords.map(c => [c.lon, c.lat]), // Intermediate stops
-                [currentLng, currentLat] // End
-            ];
-
-            const orsPayload = {
-                coordinates: routeCoords,
-            };
-            
-            const orsUrlWithKey = `${ORS_URL_BASE}/${ORS_PROFILE}/geojson?api_key=${ORS_API_KEY}`;
-
-            const maxRetries = 3;
-            let attempt = 0;
-            let response;
-            let geoJson = null;
-
-            while (attempt < maxRetries) {
-                attempt++;
-                try {
-                    response = await fetch(orsUrlWithKey, {
-                        method: 'POST',
-                        headers: {
-                            'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8', 
-                            'Content-Type': 'application/json; charset=utf-8',
-                        },
-                        body: JSON.stringify(orsPayload)
-                    });
-
-                    if (response.ok) {
-                        geoJson = await response.json();
-                        return { 
-                            distanceMiles: geoJson.features[0].properties.summary.distance / 1000 / MILES_TO_KM,
-                            geoJson: geoJson 
-                        };
-                    }
-                    
-                    if (response.status === 429 && attempt < maxRetries) {
-                        const delay = Math.pow(2, attempt) * 1000;
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                        continue;
-                    }
-
-                    if (!response.ok) {
-                        let errorText = await response.text();
-                        try {
-                            const errorJson = JSON.parse(errorText);
-                            const errorMessage = errorJson.error?.message || `ORS API failed with status ${response.status}`;
-                            throw new Error(errorMessage);
-                        } catch (e) {
-                            throw new Error(`ORS API failed (${response.status}): ${errorText.substring(0, 100)}...`);
-                        }
-                    }
-                } catch (error) {
-                    if (attempt === maxRetries) throw error;
-                    const delay = Math.pow(2, attempt) * 1000;
+                if (response.status === 429 && retries < maxRetries) {
+                    const delay = Math.pow(2, retries) * 1000 + Math.random() * 1000; // Exponential backoff + jitter
+                    console.log(`Rate limit hit. Retrying in ${Math.round(delay / 1000)}s...`);
                     await new Promise(resolve => setTimeout(resolve, delay));
+                    return fetchGeminiResponse(prompt, retries + 1);
                 }
-            }
-            throw new Error("Failed to get a successful response from ORS API after retries.");
-        }
 
+                if (!response.ok) {
+                    throw new Error(`API response status: ${response.status}`);
+                }
 
-        window.createTour = async function() {
-            
-            // Get user's desired distance
-            const desiredDistanceMiles = parseFloat(document.getElementById('tourDistance').value);
-            if (isNaN(desiredDistanceMiles) || desiredDistanceMiles <= 0) {
-                updateStatus("Please enter a valid distance.", true, false, 'tourStatus');
-                return;
-            }
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
 
-            updateStatus("Selecting pins and calculating route distance...", false, true, 'tourStatus');
-            
-            // 1. Get the list of all historic sites
-            const allLandmarks = Object.values(landmarksStore);
-            if (allLandmarks.length === 0) {
-                 updateStatus("No landmarks found. Please ensure the map has pins before starting a tour.", true, false, 'tourStatus');
-                 return;
-            }
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    const text = candidate.content.parts[0].text;
+                    let sources = [];
+                    const groundingMetadata = candidate.groundingMetadata;
 
-            // 2. Sort all landmarks by straight-line distance from user (closest first)
-            const sortedLandmarks = allLandmarks.sort((a, b) => a.distanceMiles - b.distanceMiles);
-
-            // 3. Iteratively build the tour route, stopping when the distance limit is exceeded or MAX_STOPS is reached.
-            const MAX_STOPS = 10; // Slightly increased max stops for more flexibility
-            let pointsToVisit = [];
-            let bestTourData = null; // Stores the best route that is still UNDER the desired distance
-            let routeDistanceMiles = 0;
-            
-            // Start with a route of zero stops (just back to the start) to handle edge case of 0 found pins.
-            // The logic below ensures at least one stop is attempted if available.
-
-            for (let i = 0; i < sortedLandmarks.length && i < MAX_STOPS; i++) {
-                // Add the next closest landmark
-                const nextLandmark = sortedLandmarks[i];
-                const trialPoints = [...pointsToVisit, nextLandmark];
-
-                // Update status to show progress
-                updateStatus(`Calculating route with ${trialPoints.length} stops...`, false, true, 'tourStatus');
-
-                try {
-                    // Call ORS to get the distance for the proposed route
-                    const tourResult = await getOrsRouteDistance(trialPoints);
-                    const trialDistance = tourResult.distanceMiles;
-                    
-                    console.log(`Trial with ${trialPoints.length} stops: ${trialDistance.toFixed(2)} mi. Desired: ${desiredDistanceMiles} mi.`);
-
-                    if (trialDistance > desiredDistanceMiles) {
-                        // The trial route is too long. Stop here and use the previous, shorter route.
-                        if (bestTourData) {
-                             routeDistanceMiles = bestTourData.distanceMiles;
-                             break; // Exit the loop
-                        } else {
-                            // First pin already exceeds the limit (e.g., shortest route is 12mi, user wants 5mi)
-                            routeDistanceMiles = trialDistance;
-                            bestTourData = tourResult;
-                            updateStatus(`Even the closest landmark creates a ${trialDistance.toFixed(2)} mile loop, which exceeds your ${desiredDistanceMiles} mile limit.`, true, false, 'tourStatus');
-                            pointsToVisit = trialPoints; // Use this as the "best" available route
-                            break; 
-                        }
-                    } else {
-                        // The trial route is acceptable. Commit these points and data.
-                        pointsToVisit = trialPoints;
-                        bestTourData = tourResult;
-                        routeDistanceMiles = trialDistance;
-
-                        if (i === sortedLandmarks.length - 1 || i === MAX_STOPS - 1) {
-                            // Last possible stop added
-                            break;
-                        }
+                    if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                        sources = groundingMetadata.groundingAttributions
+                            .map(attribution => ({
+                                uri: attribution.web?.uri,
+                                title: attribution.web?.title,
+                            }))
+                            .filter(source => source.uri && source.title)
+                            // Deduplicate sources by URI
+                            .reduce((acc, current) => {
+                                const x = acc.find(item => item.uri === current.uri);
+                                if (!x) {
+                                    return acc.concat([current]);
+                                } else {
+                                    return acc;
+                                }
+                            }, []);
                     }
-                } catch (error) {
-                    console.error("Single ORS calculation error, stopping tour build:", error);
-                    if (bestTourData) {
-                        updateStatus(`Could not calculate next step due to API error. Showing best route found: ${routeDistanceMiles.toFixed(2)} miles.`, true, false, 'tourStatus');
-                        break;
-                    } else {
-                        updateStatus(`Error generating tour: ${error.message.substring(0, 50)}...`, true, false, 'tourStatus');
-                        return;
-                    }
+
+                    return { text, sources };
+
+                } else {
+                    console.error("Unexpected API response structure:", result);
+                    throw new Error("Received empty or malformed response from AI.");
                 }
+
+            } catch (error) {
+                console.error("Gemini API call failed:", error);
+                throw new Error("Failed to communicate with the AI model.");
             }
+        }
 
+        // --- Event Handlers ---
 
-            // 4. Display the best route found
-            if (!bestTourData) {
-                updateStatus(`No route could be calculated. Ensure you have landmarks nearby and increase the max distance.`, true, false, 'tourStatus');
+        submitButton.addEventListener('click', async () => {
+            const userQuery = userQueryInput.value.trim();
+            if (!userQuery) {
+                userQueryInput.focus();
                 return;
             }
 
-            const geoJson = bestTourData.geoJson;
+            // Show loading state
+            submitButton.disabled = true;
+            submitButton.classList.add('opacity-50');
+            submitText.textContent = 'Thinking...';
+            loadingSpinner.classList.remove('hidden');
+            responseCard.classList.add('hidden');
+            errorMessageDiv.classList.add('hidden');
 
-            // 5. Display the route
-            if (routeLayerGroup) routeLayerGroup.clearLayers();
-            routeLayerGroup = window.L.geoJSON(geoJson.features[0], {
-                style: {
-                    color: '#eab308', // Amber color for the route
-                    weight: 6,
-                    opacity: 0.7
-                },
-                onEachFeature: function(feature, layer) {
-                    layer.bindPopup(`Tour Distance: ${routeDistanceMiles.toFixed(2)} miles.<br>Stops: ${pointsToVisit.length} landmarks.`);
-                }
-            }).addTo(map);
+            try {
+                // Construct the full prompt with location context
+                const fullPrompt = `Given the context of ${currentLocation}: ${userQuery}`;
+                
+                // Fetch the response
+                const { text, sources } = await fetchGeminiResponse(fullPrompt);
 
-            // Fit map to the route boundaries
-            map.fitBounds(routeLayerGroup.getBounds().pad(0.1));
+                // Update UI with response
+                contextLocationDisplay.textContent = currentLocation;
+                aiResponseDiv.textContent = text;
+                citationsDiv.innerHTML = sources.length > 0
+                    ? 'Sources: ' + sources.map((s, i) => `<a href="${s.uri}" target="_blank" class="text-[#4CAF50] hover:underline">${s.title} (${i + 1})</a>`).join(', ')
+                    : 'No specific web sources cited for this response.';
 
-            updateStatus(`Tour created! Distance: ${routeDistanceMiles.toFixed(2)} miles, visiting ${pointsToVisit.length} landmarks.`, false, false, 'tourStatus');
-        }
+                responseCard.classList.remove('hidden');
 
+            } catch (error) {
+                console.error("Application Error:", error);
+                errorMessageDiv.textContent = error.message || "An unexpected error occurred during processing.";
+                errorMessageDiv.classList.remove('hidden');
 
-        // --- MAP INITIALIZATION ---
-
-        function initMap() {
-            if (map) return;
-            
-            if (typeof window.L === 'undefined' || !window.L.map) {
-                setTimeout(initMap, 100);
-                return;
+            } finally {
+                // Hide loading state
+                submitButton.disabled = false;
+                submitButton.classList.remove('opacity-50');
+                submitText.textContent = 'Ask Gemini';
+                loadingSpinner.classList.add('hidden');
             }
-
-            if (!document.getElementById('map')) return;
-
-            map = window.L.map('map').setView([currentLat, currentLng], 14);
-            map.invalidateSize();
-
-            // CartoDB Positron (Simplified map style)
-            window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-                maxZoom: 19
-            }).addTo(map);
-
-            markersLayerGroup = window.L.layerGroup().addTo(map);
-            routeLayerGroup = window.L.layerGroup().addTo(map); // Initialize route layer
-            
-            // Start location and permission check
-            getUserLocation();
-            startPermissionCheck(); 
-
-            setTimeout(() => map.invalidateSize(), 250);
-        }
-
-        // --- UI INTERACTIONS ---
-
-        const slider = document.getElementById('radiusSlider');
-        const radiusLabel = document.getElementById('radiusValue');
-
-        slider.addEventListener('input', (e) => {
-            currentRadiusMiles = e.target.value;
-            radiusLabel.textContent = `${currentRadiusMiles} mi`;
         });
-
-        slider.addEventListener('change', () => {
-            fetchNearbyLandmarks();
-        });
-
-        // --- CARD LOGIC ---
-
-        window.openCard = function(id) {
-            const element = landmarksStore[id];
-            if (!element) return;
-            const tags = element.tags || {};
-
-            const card = document.getElementById('detailsCard');
-            const dataTagsContainer = document.getElementById('dataTags');
-            
-            document.getElementById('cardTitle').textContent = tags.name || tags.historic || `${element.type} ${element.id}`;
-            document.getElementById('cardRefNum').textContent = `OSM ID: ${id}`;
-            
-            document.getElementById('dataType').textContent = element.type;
-            document.getElementById('dataCoords').textContent = `${element.lat.toFixed(6)}, ${element.lon.toFixed(6)}`;
-
-            // Clear previous tags and populate with new ones
-            dataTagsContainer.innerHTML = '';
-            
-            // Re-add static fields
-            dataTagsContainer.innerHTML += `
-                <div>
-                    <p class="text-xs text-gray-500">Type</p>
-                    <p id="dataType" class="text-sm font-semibold text-gray-800">${element.type}</p>
-                </div>
-                <div>
-                    <p class="text-xs text-gray-500">Latitude, Longitude</p>
-                    <p id="dataCoords" class="text-sm font-semibold text-gray-800">${element.lat.toFixed(6)}, ${element.lon.toFixed(6)}</p>
-                </div>
-            `;
-
-            // Dynamically add other useful tags (up to 10)
-            let tagCount = 0;
-            for (const key in tags) {
-                if (tags.hasOwnProperty(key) && tagCount < 10) {
-                     dataTagsContainer.innerHTML += `
-                        <div>
-                            <p class="text-xs text-gray-500">${key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ')}</p>
-                            <p class="text-sm font-semibold text-gray-800">${tags[key]}</p>
-                        </div>
-                    `;
-                    tagCount++;
-                }
-            }
-
-            // Generate OSM link
-            const osmLink = document.getElementById('osmLink');
-            osmLink.href = `https://www.openstreetmap.org/${element.type}/${element.id}`;
-
-            card.classList.remove('hidden');
-        }
-
-        window.closeCard = function() {
-            document.getElementById('detailsCard').classList.add('hidden');
-        }
-
-        document.addEventListener('DOMContentLoaded', initializeFirebase);
-        
-        if (document.readyState === "complete" || document.readyState === "interactive") {
-            setTimeout(initMap, 100);
-        } else {
-            document.addEventListener("DOMContentLoaded", initMap);
-        }
-
     </script>
 </body>
 </html>
