@@ -60,33 +60,46 @@
 <body class="flex flex-col h-screen overflow-hidden">
 
     <!-- Header -->
-    <header class="bg-indigo-600 shadow-xl z-50 p-4 flex flex-col md:flex-row items-center justify-between gap-4 flex-none">
-        <div>
-            <h1 class="text-2xl font-bold text-white">Historic Places Explorer</h1>
-            <p class="text-indigo-200 text-sm">OpenStreetMap Data (via Overpass)</p>
-        </div>
+    <header class="bg-indigo-600 shadow-xl z-50 p-4 flex flex-col gap-3 flex-none">
+        
+        <!-- Title and Search/Tour Controls -->
+        <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-white">Historic Places Explorer</h1>
+                <p class="text-indigo-200 text-sm">OpenStreetMap Data (via Overpass)</p>
+            </div>
 
-        <!-- Search Controls -->
-        <div class="flex flex-wrap items-center justify-center gap-4">
-             <div class="bg-indigo-700 rounded-lg p-3 flex items-center gap-4 w-full md:w-auto">
-                <label for="radiusSlider" class="text-white text-sm font-medium whitespace-nowrap">Search Radius:</label>
-                <input type="range" id="radiusSlider" min="1" max="20" step="1" value="10" class="w-full md:w-48">
-                <span id="radiusValue" class="text-white font-bold text-sm w-16 text-right">10 mi</span>
+            <!-- Search Controls & Tour Button -->
+            <div class="flex flex-wrap items-center justify-center gap-4">
+                 <div class="bg-indigo-700 rounded-lg p-3 flex items-center gap-4 w-full md:w-auto">
+                    <label for="radiusSlider" class="text-white text-sm font-medium whitespace-nowrap">Search Radius:</label>
+                    <input type="range" id="radiusSlider" min="1" max="20" step="1" value="10" class="w-full md:w-48">
+                    <span id="radiusValue" class="text-white font-bold text-sm w-16 text-right">10 mi</span>
 
-                <button id="compassPermissionButton" class="bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-bold py-2 px-3 rounded-lg shadow transition whitespace-nowrap hidden">
-                    Enable Compass
+                    <button id="compassPermissionButton" class="bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-bold py-2 px-3 rounded-lg shadow transition whitespace-nowrap hidden">
+                        Enable Compass
+                    </button>
+                </div>
+                
+                <!-- Tour Button -->
+                <button id="startTourButton" onclick="openTourPanel()" class="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold py-3 px-4 rounded-lg shadow transition whitespace-nowrap">
+                    Start Tour
                 </button>
             </div>
-            
-            <!-- Tour Button -->
-            <button id="startTourButton" onclick="openTourPanel()" class="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold py-3 px-4 rounded-lg shadow transition whitespace-nowrap">
-                Start Tour
-            </button>
+        </div>
+        
+        <!-- Location Quick-Switch Buttons -->
+        <div class="flex flex-wrap gap-2 justify-center pt-2 border-t border-indigo-700">
+            <span class="text-indigo-200 text-sm font-medium self-center hidden sm:block">Quick Change:</span>
+            <button onclick="changeLocation(38.8893, -77.0502, 'Washington D.C.')" class="bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-bold py-1.5 px-3 rounded-full shadow transition">Washington D.C.</button>
+            <button onclick="changeLocation(40.7580, -73.9855, 'Midtown Manhattan')" class="bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-bold py-1.5 px-3 rounded-full shadow transition">Midtown Manhattan</button>
+            <button onclick="changeLocation(51.5074, 0.1278, 'London')" class="bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-bold py-1.5 px-3 rounded-full shadow transition">London, UK</button>
         </div>
     </header>
 
+
     <!-- Tour Panel (Hidden by default) -->
-    <div id="tourPanel" class="hidden absolute top-[6rem] right-4 bg-white p-4 rounded-xl shadow-2xl z-[1500] w-72">
+    <div id="tourPanel" class="hidden absolute top-[10rem] right-4 bg-white p-4 rounded-xl shadow-2xl z-[1500] w-72">
         <h3 class="font-bold text-lg text-indigo-700 mb-3 flex justify-between items-center">
             Create Walking Tour
             <button onclick="document.getElementById('tourPanel').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">
@@ -101,7 +114,7 @@
                 Create
             </button>
         </div>
-        <p id="tourStatus" class="text-xs mt-2 text-gray-500">Filters pins by distance and connects up to 7 closest stops for a loop tour.</p>
+        <p id="tourStatus" class="text-xs mt-2 text-gray-500">Finds closest pins and optimizes for distance.</p>
     </div>
 
     <!-- Map Container -->
@@ -187,6 +200,7 @@
         // Default to Washington D.C. (National Mall)
         let currentLat = 38.8893; 
         let currentLng = -77.0502;
+        let currentLocationName = "Washington D.C.";
         // Increased default radius to 10 miles for better chance of finding landmarks
         let currentRadiusMiles = 10; 
         let markersLayerGroup = null;
@@ -268,6 +282,7 @@
 
         function addUserMarker() {
             if (!map) return;
+            // Remove previous marker if it exists
             if (userLocationMarker) map.removeLayer(userLocationMarker);
             
             // Custom Arrow Icon HTML (filled triangle pointing up)
@@ -291,7 +306,7 @@
                 icon: userIcon,
                 zIndexOffset: 1000 // Ensure user marker is above others
             }).addTo(map)
-              .bindPopup("Your Location & Heading");
+              .bindPopup(`${currentLocationName} (Center)`);
             
             updateMarkerRotation(currentHeading);
         }
@@ -375,16 +390,17 @@
 
         function getUserLocation() {
             if (!navigator.geolocation) {
-                updateStatus("Geolocation not supported", true);
+                updateStatus(`Geolocation not supported. Showing default location: ${currentLocationName}.`, true);
                 if (map) fetchNearbyLandmarks(); 
                 return;
             }
             
-            updateStatus("Finding location...");
+            updateStatus("Finding actual location...");
             navigator.geolocation.getCurrentPosition(
                 (position) => {
                     currentLat = position.coords.latitude;
                     currentLng = position.coords.longitude;
+                    currentLocationName = "Your GPS Location";
                     updateStatus("Location found!");
                     
                     if (map) {
@@ -395,11 +411,28 @@
                 },
                 (error) => {
                     console.error("Location error:", error);
-                    updateStatus("Location denied. Using Default (D.C.)", true);
+                    updateStatus(`Location denied. Using Default: ${currentLocationName}.`, true);
                     if (map) fetchNearbyLandmarks(); 
                 },
                 { enableHighAccuracy: true, timeout: 10000 }
             );
+        }
+
+        // Function to manually change the map's center
+        window.changeLocation = function(lat, lng, name) {
+            currentLat = lat;
+            currentLng = lng;
+            currentLocationName = name;
+            
+            if (routeLayerGroup) routeLayerGroup.clearLayers();
+            
+            if (map) {
+                map.setView([currentLat, currentLng], 14);
+                fetchNearbyLandmarks();
+                updateStatus(`Location changed to ${name}.`, false);
+            } else {
+                 updateStatus(`Location changed to ${name}, initializing map...`, false);
+            }
         }
         
         function getBoundingBox(lat, lng, radiusMiles) {
@@ -435,7 +468,7 @@
             
             addUserMarker();
 
-            updateStatus(`Searching within ${currentRadiusMiles} mile(s) centered at (${currentLat.toFixed(4)}, ${currentLng.toFixed(4)})...`);
+            updateStatus(`Searching within ${currentRadiusMiles} mile(s) of ${currentLocationName}...`);
 
             const bbox = getBoundingBox(currentLat, currentLng, currentRadiusMiles);
 
@@ -473,9 +506,9 @@ out center;
                 
                 if (data.elements && data.elements.length > 0) {
                     displayLandmarks(data.elements);
-                    updateStatus(`Found ${data.elements.length} historic sites`);
+                    updateStatus(`Found ${data.elements.length} historic sites near ${currentLocationName}`);
                 } else {
-                    updateStatus("No historic sites found nearby in OpenStreetMap", true);
+                    updateStatus(`No historic sites found nearby in OpenStreetMap for ${currentLocationName}`, true);
                     if (markersLayerGroup) markersLayerGroup.clearLayers();
                 }
             } catch (error) {
