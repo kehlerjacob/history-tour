@@ -79,7 +79,8 @@
             
             /* Adjust position to center the pivot point */
             margin-top: -10px; 
-            transition: transform 0.1s linear; /* Fast rotation */
+            /* REDUCED TRANSITION TIME FOR SMOOTH COMPASS MOVEMENT */
+            transition: transform 0.05s linear; 
         }
 
         /* Message Box for custom alerts */
@@ -314,12 +315,16 @@
             return R * c; // Distance in meters
         }
 
-        // --- NEW: SENSOR DATA HANDLER ---
+        // --- UPDATED: SENSOR DATA HANDLER (Now updates DOM directly for smoothness) ---
         /**
-         * Listens to deviceorientation event and updates the global heading variable.
+         * Listens to deviceorientation event and updates the global heading variable 
+         * AND applies rotation to the arrow for smooth, high-frequency updates.
          */
         const handleCompassUpdate = (event) => {
             let magneticHeading = null;
+            const arrow = document.getElementById('userDirectionArrow');
+            const locationStatusText = document.getElementById('locationStatusText');
+
 
             // 1. Check for webkitCompassHeading (best accuracy on iOS Safari)
             if (event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
@@ -328,22 +333,37 @@
             // 2. Fallback to standard alpha (needs adjustment based on screen orientation)
             else if (event.alpha !== undefined && event.alpha !== null) {
                 let alpha = event.alpha;
-                let screenOrientation = window.screen.orientation ? window.screen.orientation.angle : (window.orientation || 0);
-
-                // Calculate magnetic heading from alpha (360 - alpha) and normalize
-                // Note: The precise calculation depends on how the device handles Z-axis rotation.
-                // For simplicity and common use, we rotate by (360 - alpha) and apply screen correction.
                 
-                // standard: magneticHeading = (360 - alpha - screenOrientation + 360) % 360;
-                magneticHeading = (360 - alpha + 360) % 360; // Simple (often sufficient)
-
-                // The standard alpha value measures rotation relative to the Z-axis.
-                // The actual correction for screen orientation is complex, so for most phones,
-                // a simple 360 - alpha is the magnetic heading relative to True North.
+                // Calculate magnetic heading (360 - alpha) and normalize
+                magneticHeading = (360 - alpha + 360) % 360; 
             }
 
             if (magneticHeading !== null) {
                 currentSensorHeading = magneticHeading;
+
+                // --- NEW HIGH-FREQUENCY VISUAL UPDATE ---
+                // We rotate the arrow. CSS rotation starts at 0 degrees (Up/North).
+                // We rotate by 360 - heading so the tip points North.
+                const pointerRotation = magneticHeading; // Rotate by the heading value itself
+
+                arrow.style.transform = `rotate(${pointerRotation}deg)`;
+                
+                const headingText = `${magneticHeading.toFixed(1)}° (Compass)`;
+                
+                // Update the status text with the current heading
+                if (locationStatusText) {
+                    // Update only the heading part if other data (Lat/Lng) is present
+                    const currentText = locationStatusText.innerHTML;
+                    const headingIndex = currentText.indexOf('(Hdg:');
+                    
+                    if (headingIndex > -1) {
+                         locationStatusText.innerHTML = currentText.substring(0, headingIndex) + `(Hdg: ${headingText})`;
+                    } else {
+                        // Fallback if Lat/Lng not loaded yet
+                        locationStatusText.innerHTML = `Acquiring Location... (Hdg: ${headingText})`;
+                    }
+                }
+                // --- END NEW VISUAL UPDATE ---
             }
         }
         
@@ -577,6 +597,10 @@
         };
 
 
+        /**
+         * Handles successful GPS position update.
+         * Note: Arrow rotation and heading text display are now handled by handleCompassUpdate()
+         */
         const watchPositionSuccess = (position) => {
             // Note: position.coords.heading is Course Over Ground (direction of movement), often null when stationary.
             const { latitude, longitude } = position.coords;
@@ -595,41 +619,30 @@
                 }
             }
 
-            // --- UPDATED HEADING LOGIC ---
-            const arrow = document.getElementById('userDirectionArrow');
+            // Determine what heading to display in the status bar (Compass takes priority)
             let displayHeading = null;
             let headingSource = "GPS";
-
-            // Priority 1: Use live sensor data if permission granted and data is flowing
+            
             if (currentSensorHeading !== null) {
                 displayHeading = currentSensorHeading;
                 headingSource = "Compass";
             } 
-            // Priority 2: Fallback to GPS Course Over Ground (only works when moving)
             else if (position.coords.heading !== null && !isNaN(position.coords.heading)) {
                 displayHeading = position.coords.heading;
                 headingSource = "GPS";
             }
             
-            let headingText = "N/A";
+            const headingText = displayHeading !== null 
+                                ? `${displayHeading.toFixed(1)}° (${headingSource})`
+                                : "N/A";
             
-            if (displayHeading !== null) {
-                // We rotate the arrow. CSS rotation starts at 0 degrees (Up/North).
-                // We rotate by 360 - heading so the tip points North (or direction of travel).
-                arrow.style.transform = `rotate(${displayHeading}deg)`;
-                headingText = `${displayHeading.toFixed(1)}° (${headingSource})`;
-            }
-
-            
-            // Update Status Bubble - Include Heading
+            // Update Status Bubble - Location and Heading
             document.getElementById('locationStatusText').innerHTML = `
                 Lat: ${latitude.toFixed(4)}, 
                 Lng: ${longitude.toFixed(4)} 
                 <span class="text-indigo-400 ml-2">(Hdg: ${headingText})</span>
             `;
-            // --- END UPDATED HEADING LOGIC ---
-
-
+            
             // Handle tour progression and instruction updates
             checkTourProgress(newLatLong);
         };
