@@ -176,7 +176,7 @@
         const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6Ijg1ZWRmZjY2Y2VkZTRkOWVhMmI4NDliNTMxOThhYTY0IiwiaCI6Im11cm11cjY0In0="; 
         
         // ORS URL uses the generic endpoint, and the profile is passed in the body.
-        const ORS_URL = "https://api.openrouteservice.org/v2/directions/geojson";
+        const ORS_URL_BASE = "https://api.openrouteservice.org/v2/directions/geojson";
 
 
         // App State
@@ -560,7 +560,6 @@ out center;
             }
 
             // 2. Select landmarks: Sort by distance and try to select landmarks that roughly match the path length.
-            // Ensure we have at least 2 points (3 total coordinates including start) for a loop.
             
             // Sort all landmarks by distance from user
             const sortedLandmarks = allLandmarks.sort((a, b) => a.distanceMiles - b.distanceMiles);
@@ -583,7 +582,7 @@ out center;
 
             // 4. Construct the ORS payload 
             const orsPayload = {
-                // *** FIX APPLIED: Using the correct profile name: foot-walking ***
+                // Profile is confirmed to be 'foot-walking'
                 profile: "foot-walking", 
                 coordinates: coords,
                 options: {
@@ -594,10 +593,10 @@ out center;
                     }
                 }
             };
-
-            // *** DEBUGGING LOGS ***
-            console.log("ORS Request URL (New structure):", ORS_URL);
-            console.log("ORS Payload (Stringified - Fixed profile):", JSON.stringify(orsPayload));
+            
+            // *** FIX: Pass API key as a query parameter instead of Authorization header ***
+            const orsUrlWithKey = `${ORS_URL_BASE}?api_key=${ORS_API_KEY}`;
+            console.log("ORS Request URL (with API key):", orsUrlWithKey);
 
 
             // 5. ORS API Request (Round Trip)
@@ -610,13 +609,12 @@ out center;
                 while (attempt < maxRetries) {
                     attempt++;
                     try {
-                        response = await fetch(ORS_URL, {
+                        response = await fetch(orsUrlWithKey, { // Use URL with API key
                             method: 'POST',
                             headers: {
-                                // Standard headers
+                                // Standard headers, OMITTING 'Authorization' HEADER
                                 'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8', 
                                 'Content-Type': 'application/json; charset=utf-8',
-                                'Authorization': ORS_API_KEY 
                             },
                             body: JSON.stringify(orsPayload)
                         });
