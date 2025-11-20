@@ -119,6 +119,7 @@
 
         /**
          * Initializes Firebase app and services.
+         * The map rendering (initMap) is now called separately to ensure faster load.
          */
         function initializeFirebase() {
             if (Object.keys(firebaseConfig).length > 0) {
@@ -148,15 +149,14 @@
                         }
                     }
                     isAuthReady = true;
-                    // Proceed with map and data loading once auth is confirmed
-                    initMap();
+                    // initMap() REMOVED from here to allow map to load instantly.
                 });
             } else {
                 console.error("Firebase config is missing or invalid. Running without persistent storage.");
                 // Fallback for environment without Firebase
                 userId = crypto.randomUUID();
                 isAuthReady = true;
-                initMap();
+                // initMap() REMOVED from here.
             }
         }
 
@@ -192,8 +192,7 @@
             map = window.L.map('map').setView([39.8283, -98.5795], 4);
             console.log("Leaflet map object created.");
 
-            // FIX: Immediately force an invalidateSize call.
-            // This is often needed right after creation in dynamically sized elements.
+            // FIX: Immediately force an invalidateSize call for flexbox rendering issues.
             map.invalidateSize({ pan: false, animate: false }); 
 
             window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -214,11 +213,11 @@
             });
             
             // Secondary critical fix: Use a slightly longer delay before calling invalidateSize() 
-            // again to ensure the DOM layout (specifically the flex-grow height) is settled.
+            // again to ensure the DOM layout is fully settled.
             setTimeout(() => {
                 console.log("Running second invalidateSize() after timeout.");
                 map.invalidateSize();
-            }, 100); // Increased to 100ms for stability
+            }, 100); 
         }
 
         /**
@@ -424,7 +423,11 @@
         }
         
         // --- START APPLICATION ---
+        // 1. Setup Firebase listeners (asynchronously)
         document.addEventListener('DOMContentLoaded', initializeFirebase);
+        
+        // 2. Render map UI immediately (synchronously)
+        document.addEventListener('DOMContentLoaded', initMap);
     </script>
 </body>
 </html>
