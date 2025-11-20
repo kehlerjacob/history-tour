@@ -139,7 +139,7 @@
             </div>
         </div>
 
-        <!-- Filter and Radius Row 2 (Full Width) -->
+        <!-- Filter and Fixed Radius Display Row 2 (Full Width) -->
         <div class="flex flex-col sm:flex-row items-center gap-3 w-full max-w-4xl mx-auto">
             
              <!-- Category Filter Input -->
@@ -150,11 +150,9 @@
                        class="w-full p-1 bg-indigo-800 text-white placeholder-indigo-300 text-xs rounded-md focus:ring-indigo-300 focus:border-indigo-300">
             </div>
 
-            <!-- Radius Slider -->
-            <div class="bg-indigo-700 rounded-lg p-2 flex items-center gap-2 w-full sm:w-auto">
-                <label for="radiusSlider" class="text-white text-xs font-medium whitespace-nowrap">Radius:</label>
-                <input type="range" id="radiusSlider" min="1" max="20" step="1" value="10" class="w-16">
-                <span id="radiusValue" class="text-white font-bold text-xs w-8 text-right">10km</span>
+            <!-- Fixed Radius Display -->
+            <div class="bg-indigo-700 rounded-lg p-2 flex items-center justify-center w-full sm:w-auto px-4">
+                <span class="text-white text-xs font-medium whitespace-nowrap">Search Radius: <span class="font-bold">5km</span></span>
             </div>
         </div>
     </header>
@@ -230,6 +228,9 @@
         let watchingPosition = false;
         let watchId = null;
         let currentManeuverIndex = -1; // Index of the next maneuver in the OSRM steps array
+
+        // CONSTANT: Fixed search radius in kilometers
+        const FIXED_SEARCH_RADIUS_KM = 5;
 
         // Custom Marker Icon for User Location (Simple Arrow)
         const userArrowIcon = L.divIcon({
@@ -397,11 +398,7 @@
                 L.control.zoom({ position: 'bottomright' }).addTo(map);
                 map.on('moveend', fetchAndPinLandmarks);
 
-                const radiusSlider = document.getElementById('radiusSlider');
-                radiusSlider.addEventListener('input', (e) => {
-                    document.getElementById('radiusValue').textContent = `${e.target.value}km`;
-                });
-                radiusSlider.addEventListener('change', fetchAndPinLandmarks);
+                // Removed radius slider initialization events
 
                 startWatchingPosition();
                 fetchAndPinLandmarks();
@@ -511,20 +508,20 @@
         };
 
 
-        // --- TOUR CONFIGURATION & INITIAL ROUTE DRAWING (Unchanged) ---
+        // --- TOUR CONFIGURATION & INITIAL ROUTE DRAWING ---
 
         const openTourPanel = () => {
             document.getElementById('tourPanel').classList.toggle('hidden');
         }
 
-        const fetchWikipediaLandmarks = async (lat, lon, radiusKm, keyword) => {
+        const fetchWikipediaLandmarks = async (lat, lon, keyword) => {
             if (isFetching) return;
             isFetching = true;
             landmarkMarkers.clearLayers();
             tourPoints = []; 
 
-            // Convert km to meters for the API
-            const radiusMeters = Math.min(radiusKm * 1000, 10000); 
+            // Use the fixed radius (5km) for the API call
+            const radiusMeters = FIXED_SEARCH_RADIUS_KM * 1000; 
 
             let url = `${WIKIPEDIA_API_URL}?action=query&list=geosearch&gsradius=${radiusMeters}&gscoord=${lat}|${lon}&gslimit=50&format=json&origin=*`;
             
@@ -565,9 +562,9 @@
 
         const fetchAndPinLandmarks = () => {
             const center = map.getCenter();
-            const radiusKm = document.getElementById('radiusSlider').value;
+            // Pass the fixed radius implicitly
             const keyword = document.getElementById('categoryFilter').value.trim();
-            fetchWikipediaLandmarks(center.lat, center.lng, radiusKm, keyword);
+            fetchWikipediaLandmarks(center.lat, center.lng, keyword);
         };
 
 
@@ -577,7 +574,7 @@
             
             if (tourPoints.length < 2) {
                 document.getElementById('tourStatus').textContent = 'Error: Not enough landmarks loaded.';
-                showMessage("Tour Failed: No Pins", `Only ${tourPoints.length} landmarks found on the map. Please ensure the map is centered over a major city and try increasing the Radius (up to 20km) in the header.`);
+                showMessage("Tour Failed: No Pins", `Only ${tourPoints.length} landmarks found on the map. Please ensure the map is centered over a major city.`);
                 return;
             }
 
