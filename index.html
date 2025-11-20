@@ -580,10 +580,10 @@ out center;
                 coords.push([lm.lon, lm.lat]);
             });
 
-            // 4. Construct the ORS payload (Explicitly including profile for robustness)
+            // 4. Construct the ORS payload 
             const orsPayload = {
                 coordinates: coords,
-                profile: 'walking', 
+                // REMOVED 'profile': 'walking' to avoid conflict with /directions/walking/geojson endpoint
                 options: {
                     round_trip: { 
                         points: pointsToUse.length + 1, // Number of stops (user + landmarks)
@@ -601,7 +601,7 @@ out center;
                 const response = await fetch(ORS_URL, {
                     method: 'POST',
                     headers: {
-                        // FIX: Explicitly request application/geo+json to resolve the 406 error
+                        // Request GeoJSON
                         'Accept': 'application/geo+json, application/json', 
                         'Content-Type': 'application/json',
                         'Authorization': ORS_API_KEY 
@@ -613,10 +613,11 @@ out center;
                     let errorText = await response.text();
                     try {
                         const errorJson = JSON.parse(errorText);
-                        // Extracting the ORS error message if available, otherwise using status
-                        throw new Error(errorJson.error?.message || `ORS API failed with status ${response.status}`);
+                        // Extracting the ORS error message if available
+                        const errorMessage = errorJson.error?.message || `ORS API failed with status ${response.status}`;
+                        throw new Error(errorMessage);
                     } catch (e) {
-                        // If JSON parsing failed (which happens for 406/400 errors sometimes), use the raw text error message
+                        // If JSON parsing failed, use the raw text error message
                         throw new Error(`ORS API failed (${response.status}): ${errorText.substring(0, 100)}...`);
                     }
                 }
