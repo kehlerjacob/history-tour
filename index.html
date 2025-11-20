@@ -174,9 +174,9 @@
         // ORS_API_KEY is configured for the tour feature.
         const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6Ijg1ZWRmZjY2Y2VkZTRkOWVhMmI4NDliNTMxOThhYTY0IiwiaCI6Im11cm11cjY0In0="; 
         
-        // FIX: Reverting to the standard "URL path only" setup, which is most likely correct,
-        // but adding extensive logging to debug the "unknown" error.
-        const ORS_URL = "https://api.openrouteservice.org/v2/directions/walking/geojson";
+        // *** FIX: REMOVING PROFILE FROM URL TO FORCE ORS TO READ IT FROM THE BODY ***
+        // Change from /directions/walking/geojson to /directions/geojson
+        const ORS_URL = "https://api.openrouteservice.org/v2/directions/geojson";
 
 
         // App State
@@ -585,8 +585,9 @@ out center;
 
             // 4. Construct the ORS payload 
             const orsPayload = {
+                // *** FIX: Explicitly adding profile to the body because the server fails to read it from the URL path. ***
+                profile: "walking",
                 coordinates: coords,
-                // Profile is removed to rely on the URL endpoint: /walking/
                 options: {
                     round_trip: { 
                         points: pointsToUse.length + 1, // Number of stops (user + landmarks)
@@ -596,8 +597,8 @@ out center;
             };
 
             // *** DEBUGGING LOGS ***
-            console.log("ORS Request URL:", ORS_URL);
-            console.log("ORS Payload (Stringified):", JSON.stringify(orsPayload));
+            console.log("ORS Request URL (New structure):", ORS_URL);
+            console.log("ORS Payload (Stringified - New profile in body):", JSON.stringify(orsPayload));
 
 
             // 5. ORS API Request (Round Trip)
@@ -613,7 +614,7 @@ out center;
                         response = await fetch(ORS_URL, {
                             method: 'POST',
                             headers: {
-                                // Updated headers based on documentation example
+                                // Standard headers
                                 'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8', 
                                 'Content-Type': 'application/json; charset=utf-8',
                                 'Authorization': ORS_API_KEY 
