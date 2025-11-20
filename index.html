@@ -580,10 +580,10 @@ out center;
                 coords.push([lm.lon, lm.lat]);
             });
 
-            // 4. Construct the ORS payload (Removed the redundant 'profile' key)
+            // 4. Construct the ORS payload (Explicitly including profile to prevent 'unknown' error)
             const orsPayload = {
                 coordinates: coords,
-                // Removed: profile: 'walking', <-- This is already specified in the ORS_URL constant
+                profile: 'walking', // Re-added explicitly
                 options: {
                     round_trip: { 
                         points: pointsToUse.length + 1, // Number of stops (user + landmarks)
@@ -601,7 +601,7 @@ out center;
                 const response = await fetch(ORS_URL, {
                     method: 'POST',
                     headers: {
-                        'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png',
+                        'Accept': 'application/json', // Simplified header
                         'Content-Type': 'application/json',
                         'Authorization': ORS_API_KEY 
                     },
@@ -610,6 +610,7 @@ out center;
 
                 if (!response.ok) {
                     const errorJson = await response.json();
+                    // Extracting the ORS error message if available, otherwise using status
                     throw new Error(errorJson.error?.message || `ORS API failed with status ${response.status}`);
                 }
 
