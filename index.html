@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nearby Historic Landmarks</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+    <!-- Leaflet CSS for Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        /* Custom styles for the map and card layout */
+        #map {
+            height: calc(100vh - 8rem); /* Use almost full height */
+            width: 100%;
+            border-radius: 0.75rem; /* rounded-xl */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            z-index: 10;
+        }
+        /* Mobile adjustment for better spacing */
+        @media (max-width: 640px) {
+            #map {
+                height: 60vh; /* Shorter map on mobile */
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen p-4 md:p-8 flex flex-col antialiased">
+
+    <div class="max-w-4xl mx-auto w-full">
+        <h1 class="text-3xl font-extrabold text-gray-900 mb-2">Historic Explorations</h1>
+        <p class="text-gray-500 mb-6">Find notable landmarks near your location.</p>
+
+        <!-- Map Container -->
+        <div id="map" class="relative"></div>
+
+        <!-- Landmark Information Card (Hidden by default) -->
+        <div id="landmark-card" class="fixed inset-x-0 bottom-0 bg-white p-4 md:p-6 shadow-2xl border-t-4 border-indigo-600 transform translate-y-full transition-transform duration-500 ease-in-out rounded-t-xl z-20">
+            <h2 id="card-title" class="text-xl md:text-2xl font-bold text-gray-900 mb-2"></h2>
+            <p id="card-subtitle" class="text-sm text-indigo-600 font-medium mb-3"></p>
+            <div id="card-content" class="text-gray-700 text-base space-y-3">
+                <p>Loading historical details...</p>
+            </div>
+            <button onclick="hideCard()" class="mt-4 absolute top-4 right-4 text-gray-500 hover:text-gray-800 transition duration-150">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+
+        <!-- Loading/Error Message Box -->
+        <div id="message-box" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded-lg shadow-lg hidden z-30 min-w-80" role="alert">
+            <p id="message-text" class="text-center font-medium"></p>
+        </div>
+    </div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <script type="module">
+        // Global variables for map and utilities
+        let map;
+        let userMarker;
+        const apiKey = ""; // API key is handled by the execution environment
+
+        // Define a set of mock historic landmarks (Actual coordinates around Raleigh, NC)
+        const mockLandmarks = [
+            { name: "The Old Post Office Museum", lat: 35.7798, lng: -78.6387, type: "Civic Building" },
+            { name: "Oakwood Historic Mansion", lat: 35.7830, lng: -78.6350, type: "Residential Home" },
+            { name: "Capitol Square", lat: 35.7804, lng: -78.6391, type: "Government Complex" },
+            { name: "Mordecai House", lat: 35.7845, lng: -78.6305, type: "Plantation House" },
+            { name: "Raleigh City Market", lat: 35.7758, lng: -78.6340, type: "Commercial Marketplace" }
+        ];
+
+        // The center coordinates for the map display
+        const DEFAULT_CENTER_LAT = 35.7796;
+        const DEFAULT_CENTER_LNG = -78.6382;
+
+        // --- Utility Functions ---
+
+        /**
+         * Displays a temporary, centralized message to the user.
+         * @param {string} message The text to display.
+         * @param {string} type 'success', 'error', or 'warning'.
+         */
+        function showMessage(message, type = 'warning') {
+            const box = document.getElementById('message-box');
+            const text = document.getElementById('message-text');
+            let classes = "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 p-4 border rounded-lg shadow-lg z-30 min-w-80 ";
+
+            // Set colors based on type
+            if (type === 'error') {
+                classes += "bg-red-100 border-red-400 text-red-700";
+            } else if (type === 'success') {
+                classes += "bg-green-100 border-green-400 text-green-700";
+            } else { // warning/info
+                classes += "bg-yellow-100 border-yellow-400 text-yellow-700";
+            }
+
+            box.className = classes;
+            text.textContent = message;
+            box.classList.remove('hidden');
+
+            // Hide after 5 seconds
+            setTimeout(() => {
+                box.classList.add('hidden');
+            }, 5000);
+        }
+
+        /**
+         * Hides the landmark detail card.
+         */
+        function hideCard() {
+            const card = document.getElementById('landmark-card');
+            card.classList.remove('translate-y-0');
+            card.classList.add('translate-y-full');
+        }
+
+        /**
+         * Initializes the Leaflet map, always centering on the mock landmark data.
+         * @param {number} lat - Initial latitude (unused in this version, kept for function signature).
+         * @param {number} lng - Initial longitude (unused in this version, kept for function signature).
+         */
+        function initMap() {
+            // Check if map is already initialized
+            if (map) {
+                map.remove();
+            }
+
+            // Center map on the mock landmark data for visibility
+            map = L.map('map').setView([DEFAULT_CENTER_LAT, DEFAULT_CENTER_LNG], 14); 
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        /**
+         * Adds a marker for the user's current location.
+         * @param {number} lat - User's latitude.
+         * @param {number} lng - User's longitude.
+         */
+        function addUserMarker(lat, lng) {
+            if (!map) return; 
+
+            const userIcon = L.divIcon({
+                className: 'bg-indigo-600 rounded-full w-4 h-4 shadow-xl border-2 border-white',
+                iconSize: [16, 16],
+                html: ''
+            });
+            // Remove existing user marker if present
+            if (userMarker) {
+                map.removeLayer(userMarker);
+            }
+
+            userMarker = L.marker([lat, lng], { icon: userIcon }).addTo(map)
+                .bindTooltip("Your actual location", { permanent: true, direction: 'right' });
+        }
+
+
+        /**
+         * Loads mock landmarks onto the map using their actual coordinates.
+         */
+        function loadLandmarks() {
+            const landmarkIcon = L.divIcon({
+                className: 'flex items-center justify-center text-red-700',
+                iconSize: [30, 30],
+                html: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7"><path fill-rule="evenodd" d="m11.54 22.351.07.074.072.069a.75.75 0 0 0 1.002 0l.07-.069.074-.075A2.784 2.784 0 0 0 18.25 15.68h-.008c.594-.65.94-1.423.94-2.316l.001-2.906c0-3.328-2.34-6.002-5.166-6.444l-.24-.031a.75.75 0 0 0-.274-.012l-.2-.007-.015-.001-.013-.001c-3.238 0-5.875 2.637-5.875 5.875v2.906c0 .893.346 1.666.94 2.316h-.008c2.008 2.213 3.931 3.5 4.5 3.5.569 0 2.492-1.287 4.5-3.5h-.008Zm-.202-.676-.041-.043-.035-.035c-.098-.097-.215-.2-.341-.318l-.053-.049c-.436-.421-.86-.788-1.246-1.071l-.104-.08c-1.127-.852-2.126-1.558-2.888-2.079l-.022-.015c-.443-.314-.84-.59-1.192-.816a3.84 3.84 0 0 1-.502-.303c-.22-.167-.428-.352-.619-.554a4.342 4.342 0 0 1-.458-.696c-.228-.415-.346-.86-.346-1.309V11.25a4.375 4.375 0 0 1 8.75 0v1.791c0 .448-.118.894-.346 1.309a4.342 4.342 0 0 1-.458.696c-.191.202-.399.387-.619.554a3.84 3.84 0 0 1-.502.303c-.352.226-.749.502-1.192.816l-.022.015c-.762.521-1.761 1.227-2.888 2.079l-.104.08c-.386.283-.81.65-1.246 1.071l-.053.049c-.126.118-.243.22-.341.318l-.035.035-.041.043-.058.056Z" clip-rule="evenodd" /></svg>'
+            });
+
+            mockLandmarks.forEach(landmark => {
+                // Use the hardcoded coordinates directly
+                const marker = L.marker([landmark.lat, landmark.lng], { icon: landmarkIcon }).addTo(map);
+                
+                // Note: We pass the *original* landmark object to showLandmarkInfo so the LLM prompt is consistent
+                marker.on('click', () => showLandmarkInfo(landmark));
+                marker.bindTooltip(landmark.name, { direction: 'top' });
+            });
+        }
+
+        /**
+         * Main function to get user location and initialize the map.
+         */
+        function getUserLocation() {
+            // 1. Initialize map centered on the mock data (Raleigh) first
+            initMap();
+            loadLandmarks();
+
+            if (navigator.geolocation) {
+                showMessage("Attempting to find your location...", 'warning');
+
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const { latitude, longitude } = position.coords;
+                        showMessage("Location found! Map centered on mock landmarks. Your location is marked by the blue dot.", 'success');
+                        
+                        // Add the user marker at the actual location
+                        addUserMarker(latitude, longitude);
+                    },
+                    (error) => {
+                        // FIX: Log code and message for better debugging info
+                        console.error("Geolocation error:", error.code, error.message);
+                        showMessage("Could not get your location. Displaying landmarks in a default area (Raleigh, NC).", 'error');
+                        // Map remains centered on default, landmarks are loaded
+                    },
+                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                );
+            } else {
+                showMessage("Geolocation is not supported by your browser. Displaying landmarks in a default area (Raleigh, NC).", 'error');
+                // Map remains centered on default, landmarks are loaded
+            }
+        }
+
+        /**
+         * Fetches detailed information for a landmark using the Gemini API.
+         * Implements exponential backoff for retries.
+         * @param {object} landmark - The landmark object.
+         * @returns {Promise<string>} - The generated description text.
+         */
+        async function fetchLandmarkDetails(landmark) {
+            const systemPrompt = `You are a knowledgeable historian specializing in American architecture and social history. Your task is to generate a concise, detailed, and engaging historical summary about the provided landmark. The summary must include: 1. The assumed year or era it was built. 2. A description of the architecture. 3. At least one notable figure who lived there or was associated with it, and their importance. 4. The landmark's significance to local history. The response must be a single, well-formatted paragraph.`;
+            const userQuery = `Write a historical summary for a landmark named "${landmark.name}", which is classified as a "${landmark.type}". Assume it is located in a historic US city.`;
+
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                // Use grounding for a more realistic response, leveraging web data
+                tools: [{ "google_search": {} }]
+            };
+
+            const maxRetries = 3;
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        if (response.status === 429 && attempt < maxRetries - 1) {
+                            // Rate limit: wait and retry
+                            const delay = Math.pow(2, attempt) * 1000;
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            continue;
+                        }
+                        throw new Error(`API error: ${response.statusText}`);
+                    }
+
+                    const result = await response.json();
+                    const candidate = result.candidates?.[0];
+
+                    if (candidate && candidate.content?.parts?.[0]?.text) {
+                        let text = candidate.content.parts[0].text;
+                        const sources = candidate.groundingMetadata?.groundingAttributions || [];
+
+                        // Add citations to the end of the text
+                        if (sources.length > 0) {
+                            text += '<p class="text-xs mt-3 italic text-gray-400">Source Citations:';
+                            sources.forEach((source, index) => {
+                                if (source.web?.uri && source.web?.title) {
+                                    text += ` <a href="${source.web.uri}" target="_blank" class="text-blue-500 hover:text-blue-700 underline">(${index + 1}) ${source.web.title}</a>`;
+                                }
+                            });
+                            text += '</p>';
+                        }
+
+                        return text;
+                    } else {
+                        throw new Error("API response was empty or malformed.");
+                    }
+
+                } catch (error) {
+                    console.error(`Attempt ${attempt + 1} failed:`, error);
+                    if (attempt === maxRetries - 1) {
+                        return "Historical details could not be loaded due to an API issue. Please try again later.";
+                    }
+                }
+            }
+            return "Failed to load historical details after multiple retries.";
+        }
+
+        /**
+         * Populates and displays the landmark card when a pin is clicked.
+         * @param {object} landmark - The landmark object.
+         */
+        async function showLandmarkInfo(landmark) {
+            const card = document.getElementById('landmark-card');
+            const titleEl = document.getElementById('card-title');
+            const subtitleEl = document.getElementById('card-subtitle');
+            const contentEl = document.getElementById('card-content');
+
+            // 1. Update title and subtitle immediately
+            titleEl.textContent = landmark.name;
+            subtitleEl.textContent = landmark.type;
+            contentEl.innerHTML = '<div class="flex items-center space-x-2 text-indigo-500"><svg class="animate-spin h-5 w-5 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><p>Generating historical summary...</p></div>';
+
+            // 2. Display the card
+            card.classList.remove('translate-y-full');
+            card.classList.add('translate-y-0');
+
+            // 3. Fetch detailed content from the simulated LLM API
+            const description = await fetchLandmarkDetails(landmark);
+
+            // 4. Update content
+            contentEl.innerHTML = description;
+        }
+
+        // --- Initialization ---
+        window.onload = getUserLocation;
+
+        // Make hideCard available globally
+        window.hideCard = hideCard;
+
+    </script>
+</body>
+</html>
