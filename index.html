@@ -88,49 +88,6 @@
         }
     </script>
 
-    <!-- IMMEDIATE LOAD CONFIRMATION -->
-    <script>
-        // This runs IMMEDIATELY to prove the page loaded
-        const loadBanner = document.createElement('div');
-        loadBanner.style.position = 'fixed';
-        loadBanner.style.top = '0';
-        loadBanner.style.left = '0';
-        loadBanner.style.width = '100%';
-        loadBanner.style.backgroundColor = 'rgba(34, 197, 94, 0.95)'; // Green
-        loadBanner.style.color = 'white';
-        loadBanner.style.padding = '0.5rem';
-        loadBanner.style.zIndex = '99999';
-        loadBanner.style.fontSize = '14px';
-        loadBanner.style.fontWeight = 'bold';
-        loadBanner.style.textAlign = 'center';
-        loadBanner.innerHTML = '✓ v2.1 LOADED SUCCESSFULLY';
-        document.documentElement.appendChild(loadBanner);
-
-        // Check if header exists after a brief delay
-        setTimeout(() => {
-            const header = document.querySelector('header');
-            const debugBanner = document.createElement('div');
-            debugBanner.style.position = 'fixed';
-            debugBanner.style.top = '40px';
-            debugBanner.style.left = '0';
-            debugBanner.style.width = '100%';
-            debugBanner.style.backgroundColor = 'rgba(59, 130, 246, 0.95)'; // Blue
-            debugBanner.style.color = 'white';
-            debugBanner.style.padding = '0.5rem';
-            debugBanner.style.zIndex = '99999';
-            debugBanner.style.fontSize = '12px';
-            debugBanner.style.textAlign = 'center';
-
-            if (header) {
-                const rect = header.getBoundingClientRect();
-                debugBanner.innerHTML = `HEADER EXISTS: top=${rect.top.toFixed(0)}px height=${rect.height.toFixed(0)}px display=${getComputedStyle(header).display}`;
-            } else {
-                debugBanner.innerHTML = 'HEADER NOT FOUND IN DOM!';
-            }
-            document.documentElement.appendChild(debugBanner);
-        }, 1000);
-    </script>
-
     <!-- Leaflet Polyline Decoders/Encoders - required for OSRM routes -->
     <script src="https://unpkg.com/@mapbox/polyline@1.0.0/src/polyline.js"></script>
 
