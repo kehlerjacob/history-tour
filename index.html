@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Historic Landmark Explorer</title>
+    <title>Historic Landmark Map</title>
     <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- Leaflet CSS -->
@@ -553,53 +553,39 @@ out center;
 
             updateStatus("Generating tour route...", false, true, 'tourStatus');
             
-            // 1. Get the list of all historic sites
+            // 1. Get the list of all historic sites (not used for ORS input, but useful for user context)
             const allLandmarks = Object.values(landmarksStore);
             if (allLandmarks.length === 0) {
                  updateStatus("No landmarks found. Please ensure the map has points before starting a tour.", true, false, 'tourStatus');
                  return;
             }
 
-            // 2. Select landmarks: Sort by distance and try to select landmarks that roughly match the path length.
+            // 2. Prepare coordinates: 
+            // The ORS 'round_trip' option requires ONLY the starting point in the coordinates array.
+            const coords = [[currentLng, currentLat]]; // Length MUST be 1 (Lng, Lat)
             
-            // Sort all landmarks by distance from user
-            const sortedLandmarks = allLandmarks.sort((a, b) => a.distanceMiles - b.distanceMiles);
-
-            // Target a maximum of 10 points for routing complexity, using the closest ones.
-            const maxPoints = 10;
-            const pointsToUse = sortedLandmarks.slice(0, Math.min(sortedLandmarks.length, maxPoints));
-
-            if (pointsToUse.length < 2) {
-                 updateStatus("Need at least 2 landmarks in the search radius for a viable tour.", true, false, 'tourStatus');
-                 return;
-            }
-
-            // 3. Prepare coordinates for OpenRouteService (Lng, Lat format)
-            const coords = [[currentLng, currentLat]]; // Start point (user location)
-            
-            pointsToUse.forEach(lm => {
-                coords.push([lm.lon, lm.lat]);
-            });
-
-            // 4. Construct the ORS payload 
+            // 3. Construct the ORS payload 
             const orsPayload = {
-                // Profile is now in the URL, only send coordinates and options
-                coordinates: coords,
+                coordinates: coords, // Only the start point
                 options: {
                     round_trip: { 
-                        points: pointsToUse.length + 1, // Number of stops (user + landmarks)
-                        // Target distance in meters (desiredDistanceMiles * miles_to_km * 1000)
+                        // length in meters: desiredDistanceMiles * 1.60934 * 1000
                         length: desiredDistanceMiles * 1000 * MILES_TO_KM 
                     }
+                    // Note: Removed 'points' parameter to simplify and let ORS decide stops.
                 }
             };
             
-            // *** FIX: Inject the profile directly into the URL path as required by ORS V2 ***
+            // Log the coordinates length to confirm the fix
+            console.log("DEBUG: ORS Coordinates length:", coords.length);
+
+
+            // *** Inject the profile directly into the URL path as required by ORS V2 ***
             const orsUrlWithKey = `${ORS_URL_BASE}/${ORS_PROFILE}/geojson?api_key=${ORS_API_KEY}`;
             console.log("ORS Request URL (with Profile in path):", orsUrlWithKey);
 
 
-            // 5. ORS API Request (Round Trip)
+            // 4. ORS API Request (Round Trip)
             try {
                 // Implementing exponential backoff for robustness
                 const maxRetries = 3;
@@ -654,7 +640,7 @@ out center;
 
                 const geoJson = await response.json();
                 
-                // 6. Display the route
+                // 5. Display the route
                 if (geoJson.features && geoJson.features.length > 0) {
                     const routeFeature = geoJson.features[0];
                     const routeDistanceKm = routeFeature.properties.summary.distance / 1000;
