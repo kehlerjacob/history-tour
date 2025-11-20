@@ -88,6 +88,25 @@
         }
     </script>
 
+    <!-- IMMEDIATE LOAD CONFIRMATION -->
+    <script>
+        // This runs IMMEDIATELY to prove the page loaded
+        const loadBanner = document.createElement('div');
+        loadBanner.style.position = 'fixed';
+        loadBanner.style.top = '0';
+        loadBanner.style.left = '0';
+        loadBanner.style.width = '100%';
+        loadBanner.style.backgroundColor = 'rgba(34, 197, 94, 0.95)'; // Green
+        loadBanner.style.color = 'white';
+        loadBanner.style.padding = '0.5rem';
+        loadBanner.style.zIndex = '99999';
+        loadBanner.style.fontSize = '14px';
+        loadBanner.style.fontWeight = 'bold';
+        loadBanner.style.textAlign = 'center';
+        loadBanner.innerHTML = '✓ v2.1 LOADED SUCCESSFULLY';
+        document.documentElement.appendChild(loadBanner);
+    </script>
+
     <!-- Leaflet Polyline Decoders/Encoders - required for OSRM routes -->
     <script src="https://unpkg.com/@mapbox/polyline@1.0.0/src/polyline.js"></script>
 
@@ -220,7 +239,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v2.0</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v2.1</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
