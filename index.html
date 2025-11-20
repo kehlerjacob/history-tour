@@ -20,8 +20,8 @@
             background-color: #f7f9fc;
         }
         #map {
-            height: 100vh;
-            width: 100vw;
+            /* Use 100% height relative to parent (flex-grow) */
+            height: 100%;
             z-index: 10; /* Below the header and card */
         }
         .leaflet-container {
@@ -201,6 +201,10 @@
                         </button>`
                     );
             });
+            
+            // Crucial fix: Forces the map to redraw itself and load tiles, fixing issues
+            // where the container size is not correctly registered on initial load.
+            map.invalidateSize();
         }
 
         /**
