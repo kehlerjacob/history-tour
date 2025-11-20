@@ -251,7 +251,7 @@
     </style>
 </head>
 
-<body class="flex flex-col h-screen overflow-hidden" style="padding-top: 150px;">
+<body class="flex flex-col h-screen overflow-hidden">
 
     <!-- Message Box (Custom Alert) -->
     <div id="messageBox" class="p-6 bg-white rounded-xl shadow-2xl max-w-sm w-full">
@@ -362,7 +362,8 @@
     </div>
 
     <!-- Map Container -->
-    <div id="map" class="flex-1 w-full bg-gray-200"></div>
+    <div id="map" class="w-full bg-gray-200"
+        style="position: fixed !important; top: 150px; left: 0; right: 0; bottom: 0; z-index: 1 !important;"></div>
 
     <!-- Location Status Bubble (REPOSITIONED & Compacted) -->
     <div id="locationStatus"
