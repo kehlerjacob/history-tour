@@ -171,7 +171,7 @@
         let userId = null;
 
         // Configuration 
-        // ORS_API_KEY has been updated. The round-trip tour feature is now enabled.
+        // ORS_API_KEY is configured for the tour feature.
         const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6Ijg1ZWRmZjY2Y2VkZTRkOWVhMmI4NDliNTMxOThhYTY0IiwiaCI6Im11cm11cjY0In0="; 
         const ORS_URL = "https://api.openrouteservice.org/v2/directions/walking/geojson";
 
@@ -540,7 +540,6 @@ out center;
         }
 
         window.createTour = async function() {
-            // ORS_API_KEY check is removed as the key is now set
             
             const desiredDistanceMiles = parseFloat(document.getElementById('tourDistance').value);
             if (isNaN(desiredDistanceMiles) || desiredDistanceMiles <= 0) {
@@ -583,7 +582,22 @@ out center;
                 coords.push([lm.lon, lm.lat]);
             });
 
-            // 4. ORS API Request (Round Trip)
+            // 4. Construct the ORS payload
+            const orsPayload = {
+                coordinates: coords,
+                profile: 'walking', // <-- CONFIRMED: MUST BE 'walking'
+                options: {
+                    round_trip: { 
+                        points: pointsToUse.length + 1, // Number of stops (user + landmarks)
+                        length: desiredDistanceMiles * 1000 * MILES_TO_KM // Target distance in meters
+                    }
+                }
+            };
+
+            console.log("ORS Payload:", orsPayload);
+
+
+            // 5. ORS API Request (Round Trip)
             try {
                 const response = await fetch(ORS_URL, {
                     method: 'POST',
@@ -592,16 +606,7 @@ out center;
                         'Content-Type': 'application/json',
                         'Authorization': ORS_API_KEY 
                     },
-                    body: JSON.stringify({
-                        coordinates: coords,
-                        profile: 'walking',
-                        options: {
-                            round_trip: { 
-                                points: pointsToUse.length + 1, // Number of stops (user + landmarks)
-                                length: desiredDistanceMiles * 1000 * MILES_TO_KM // Target distance in meters
-                            }
-                        }
-                    })
+                    body: JSON.stringify(orsPayload)
                 });
 
                 if (!response.ok) {
@@ -611,7 +616,7 @@ out center;
 
                 const geoJson = await response.json();
                 
-                // 5. Display the route
+                // 6. Display the route
                 if (geoJson.features && geoJson.features.length > 0) {
                     const routeFeature = geoJson.features[0];
                     const routeDistanceKm = routeFeature.properties.summary.distance / 1000;
