@@ -580,10 +580,10 @@ out center;
                 coords.push([lm.lon, lm.lat]);
             });
 
-            // 4. Construct the ORS payload (Explicitly including profile to prevent 'unknown' error)
+            // 4. Construct the ORS payload (Explicitly including profile for robustness)
             const orsPayload = {
                 coordinates: coords,
-                profile: 'walking', // Re-added explicitly
+                profile: 'walking', 
                 options: {
                     round_trip: { 
                         points: pointsToUse.length + 1, // Number of stops (user + landmarks)
@@ -601,7 +601,8 @@ out center;
                 const response = await fetch(ORS_URL, {
                     method: 'POST',
                     headers: {
-                        'Accept': 'application/json', // Simplified header
+                        // FIX: Explicitly request application/geo+json to resolve the 406 error
+                        'Accept': 'application/geo+json, application/json', 
                         'Content-Type': 'application/json',
                         'Authorization': ORS_API_KEY 
                     },
@@ -609,9 +610,15 @@ out center;
                 });
 
                 if (!response.ok) {
-                    const errorJson = await response.json();
-                    // Extracting the ORS error message if available, otherwise using status
-                    throw new Error(errorJson.error?.message || `ORS API failed with status ${response.status}`);
+                    let errorText = await response.text();
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        // Extracting the ORS error message if available, otherwise using status
+                        throw new Error(errorJson.error?.message || `ORS API failed with status ${response.status}`);
+                    } catch (e) {
+                        // If JSON parsing failed (which happens for 406/400 errors sometimes), use the raw text error message
+                        throw new Error(`ORS API failed (${response.status}): ${errorText.substring(0, 100)}...`);
+                    }
                 }
 
                 const geoJson = await response.json();
