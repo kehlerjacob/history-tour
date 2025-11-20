@@ -160,7 +160,7 @@
             }
         }
 
-        // --- GEOLOCATION & NPS API ---
+        // --- GEOLOCATION & NPS API UTILS ---
 
         function updateStatus(msg, isError = false) {
             const el = document.getElementById('locationStatus');
@@ -181,6 +181,23 @@
             setTimeout(() => { el.classList.add('opacity-0'); }, 4000);
         }
 
+        // MOVED DEFINITION: Defining addUserMarker before it is called by getUserLocation
+        function addUserMarker() {
+            if (!map) return;
+            if (userLocationMarker) map.removeLayer(userLocationMarker);
+            
+            const userIcon = window.L.divIcon({
+                className: 'bg-blue-600 border-2 border-white rounded-full shadow-xl',
+                iconSize: [16, 16],
+                html: ''
+            });
+            
+            userLocationMarker = window.L.marker([currentLat, currentLng], {icon: userIcon})
+                .addTo(map)
+                .bindPopup("You are here")
+                .openPopup();
+        }
+
         function getUserLocation() {
             if (!navigator.geolocation) {
                 updateStatus("Geolocation not supported", true);
@@ -197,7 +214,7 @@
                     
                     if (map) {
                         map.setView([currentLat, currentLng], 14);
-                        addUserMarker();
+                        addUserMarker(); 
                         fetchNearbyLandmarks();
                     }
                 },
