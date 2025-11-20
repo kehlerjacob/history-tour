@@ -543,6 +543,72 @@ out center;
                  updateStatus("Enter your desired walking distance.", false, false, 'tourStatus');
             }
         }
+        
+        // Helper function to call the ORS API for a given set of coordinates
+        async function getOrsRouteDistance(coords) {
+             // Route MUST be: Start -> Closest_L1 -> Closest_L2 -> ... -> Closest_LN -> Start (Loop)
+            const routeCoords = [
+                [currentLng, currentLat], // Start
+                ...coords.map(c => [c.lon, c.lat]), // Intermediate stops
+                [currentLng, currentLat] // End
+            ];
+
+            const orsPayload = {
+                coordinates: routeCoords,
+            };
+            
+            const orsUrlWithKey = `${ORS_URL_BASE}/${ORS_PROFILE}/geojson?api_key=${ORS_API_KEY}`;
+
+            const maxRetries = 3;
+            let attempt = 0;
+            let response;
+            let geoJson = null;
+
+            while (attempt < maxRetries) {
+                attempt++;
+                try {
+                    response = await fetch(orsUrlWithKey, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8', 
+                            'Content-Type': 'application/json; charset=utf-8',
+                        },
+                        body: JSON.stringify(orsPayload)
+                    });
+
+                    if (response.ok) {
+                        geoJson = await response.json();
+                        return { 
+                            distanceMiles: geoJson.features[0].properties.summary.distance / 1000 / MILES_TO_KM,
+                            geoJson: geoJson 
+                        };
+                    }
+                    
+                    if (response.status === 429 && attempt < maxRetries) {
+                        const delay = Math.pow(2, attempt) * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
+                    }
+
+                    if (!response.ok) {
+                        let errorText = await response.text();
+                        try {
+                            const errorJson = JSON.parse(errorText);
+                            const errorMessage = errorJson.error?.message || `ORS API failed with status ${response.status}`;
+                            throw new Error(errorMessage);
+                        } catch (e) {
+                            throw new Error(`ORS API failed (${response.status}): ${errorText.substring(0, 100)}...`);
+                        }
+                    }
+                } catch (error) {
+                    if (attempt === maxRetries) throw error;
+                    const delay = Math.pow(2, attempt) * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+            throw new Error("Failed to get a successful response from ORS API after retries.");
+        }
+
 
         window.createTour = async function() {
             
@@ -553,7 +619,7 @@ out center;
                 return;
             }
 
-            updateStatus("Generating tour route by connecting closest landmarks...", false, true, 'tourStatus');
+            updateStatus("Selecting pins and calculating route distance...", false, true, 'tourStatus');
             
             // 1. Get the list of all historic sites
             const allLandmarks = Object.values(landmarksStore);
@@ -562,147 +628,95 @@ out center;
                  return;
             }
 
-            // 2. Select landmarks: Sort by distance, filter by desired distance, and limit the stops.
-            const MAX_STOPS = 7; // Max intermediate stops for a reliable ORS response
+            // 2. Sort all landmarks by straight-line distance from user (closest first)
+            const sortedLandmarks = allLandmarks.sort((a, b) => a.distanceMiles - b.distanceMiles);
+
+            // 3. Iteratively build the tour route, stopping when the distance limit is exceeded or MAX_STOPS is reached.
+            const MAX_STOPS = 10; // Slightly increased max stops for more flexibility
+            let pointsToVisit = [];
+            let bestTourData = null; // Stores the best route that is still UNDER the desired distance
+            let routeDistanceMiles = 0;
             
-            // Heuristic: Straight-line distance to any pin should be no more than 50% of the desired total walking distance.
-            const MAX_STRAIGHT_LINE_DISTANCE = desiredDistanceMiles / 2; 
-            
-            // Filter first: only keep pins within the max straight-line distance
-            const filteredLandmarks = allLandmarks.filter(
-                lm => lm.distanceMiles <= MAX_STRAIGHT_LINE_DISTANCE
-            );
+            // Start with a route of zero stops (just back to the start) to handle edge case of 0 found pins.
+            // The logic below ensures at least one stop is attempted if available.
 
-            // Sort filtered landmarks by distance from user (closest first)
-            const sortedLandmarks = filteredLandmarks.sort((a, b) => a.distanceMiles - b.distanceMiles);
+            for (let i = 0; i < sortedLandmarks.length && i < MAX_STOPS; i++) {
+                // Add the next closest landmark
+                const nextLandmark = sortedLandmarks[i];
+                const trialPoints = [...pointsToVisit, nextLandmark];
 
-            // Select the closest stops, up to MAX_STOPS
-            const pointsToVisit = sortedLandmarks.slice(0, Math.min(sortedLandmarks.length, MAX_STOPS));
+                // Update status to show progress
+                updateStatus(`Calculating route with ${trialPoints.length} stops...`, false, true, 'tourStatus');
 
-            if (pointsToVisit.length === 0) {
-                let statusMessage = "The desired tour distance is too short to include any nearby pins.";
-                if (allLandmarks.length > 0) {
-                     statusMessage += ` Try increasing the distance above ${Math.ceil(allLandmarks[0].distanceMiles * 2)} miles.`;
+                try {
+                    // Call ORS to get the distance for the proposed route
+                    const tourResult = await getOrsRouteDistance(trialPoints);
+                    const trialDistance = tourResult.distanceMiles;
+                    
+                    console.log(`Trial with ${trialPoints.length} stops: ${trialDistance.toFixed(2)} mi. Desired: ${desiredDistanceMiles} mi.`);
+
+                    if (trialDistance > desiredDistanceMiles) {
+                        // The trial route is too long. Stop here and use the previous, shorter route.
+                        if (bestTourData) {
+                             routeDistanceMiles = bestTourData.distanceMiles;
+                             break; // Exit the loop
+                        } else {
+                            // First pin already exceeds the limit (e.g., shortest route is 12mi, user wants 5mi)
+                            routeDistanceMiles = trialDistance;
+                            bestTourData = tourResult;
+                            updateStatus(`Even the closest landmark creates a ${trialDistance.toFixed(2)} mile loop, which exceeds your ${desiredDistanceMiles} mile limit.`, true, false, 'tourStatus');
+                            pointsToVisit = trialPoints; // Use this as the "best" available route
+                            break; 
+                        }
+                    } else {
+                        // The trial route is acceptable. Commit these points and data.
+                        pointsToVisit = trialPoints;
+                        bestTourData = tourResult;
+                        routeDistanceMiles = trialDistance;
+
+                        if (i === sortedLandmarks.length - 1 || i === MAX_STOPS - 1) {
+                            // Last possible stop added
+                            break;
+                        }
+                    }
+                } catch (error) {
+                    console.error("Single ORS calculation error, stopping tour build:", error);
+                    if (bestTourData) {
+                        updateStatus(`Could not calculate next step due to API error. Showing best route found: ${routeDistanceMiles.toFixed(2)} miles.`, true, false, 'tourStatus');
+                        break;
+                    } else {
+                        updateStatus(`Error generating tour: ${error.message.substring(0, 50)}...`, true, false, 'tourStatus');
+                        return;
+                    }
                 }
-                updateStatus(statusMessage, true, false, 'tourStatus');
+            }
+
+
+            // 4. Display the best route found
+            if (!bestTourData) {
+                updateStatus(`No route could be calculated. Ensure you have landmarks nearby and increase the max distance.`, true, false, 'tourStatus');
                 return;
             }
 
-            // 3. Prepare coordinates for OpenRouteService (Lng, Lat format)
-            // The route MUST be: Start -> Closest_L1 -> Closest_L2 -> ... -> Closest_LN -> Start (Loop)
-            const coords = [];
-            
-            // Start point (user location)
-            coords.push([currentLng, currentLat]); 
-            
-            // Intermediate stops (the landmarks, already sorted by proximity)
-            pointsToVisit.forEach((lm, index) => {
-                coords.push([lm.lon, lm.lat]);
-                console.log(`Tour Stop ${index + 1}: ${lm.tags.name || lm.tags.historic || 'Landmark'} at ${lm.distanceMiles.toFixed(2)} mi.`);
-            });
-            
-            // End point (back to user location)
-            coords.push([currentLng, currentLat]); 
+            const geoJson = bestTourData.geoJson;
 
-
-            // 4. Construct the ORS payload (standard multi-point route, NOT round_trip)
-            const orsPayload = {
-                coordinates: coords, // Array of Lng, Lat pairs
-            };
-            
-            console.log("DEBUG: ORS Coordinates length:", coords.length);
-            console.log("DEBUG: Number of Landmarks visited:", pointsToVisit.length);
-
-
-            // *** Inject the profile directly into the URL path as required by ORS V2 ***
-            const orsUrlWithKey = `${ORS_URL_BASE}/${ORS_PROFILE}/geojson?api_key=${ORS_API_KEY}`;
-            console.log("ORS Request URL (with Profile in path):", orsUrlWithKey);
-
-
-            // 5. ORS API Request
-            try {
-                // Implementing exponential backoff for robustness
-                const maxRetries = 3;
-                let attempt = 0;
-                let response;
-
-                while (attempt < maxRetries) {
-                    attempt++;
-                    try {
-                        response = await fetch(orsUrlWithKey, { // Use URL with profile and API key
-                            method: 'POST',
-                            headers: {
-                                'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8', 
-                                'Content-Type': 'application/json; charset=utf-8',
-                            },
-                            body: JSON.stringify(orsPayload)
-                        });
-
-                        if (response.ok) break; // Success, exit loop
-                        
-                        // Handle 429 (Rate Limit) by retrying
-                        if (response.status === 429 && attempt < maxRetries) {
-                            const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s...
-                            await new Promise(resolve => setTimeout(resolve, delay));
-                            continue; // Retry
-                        }
-
-                        // For other non-OK statuses (400, 403, 500, etc.)
-                        if (!response.ok) {
-                            let errorText = await response.text();
-                            try {
-                                const errorJson = JSON.parse(errorText);
-                                const errorMessage = errorJson.error?.message || `ORS API failed with status ${response.status}`;
-                                throw new Error(errorMessage);
-                            } catch (e) {
-                                throw new Error(`ORS API failed (${response.status}): ${errorText.substring(0, 100)}...`);
-                            }
-                        }
-                    } catch (error) {
-                        if (attempt === maxRetries) throw error; // Re-throw only on final failure
-                        // For network errors or temporary failures, wait and retry
-                        const delay = Math.pow(2, attempt) * 1000;
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                    }
+            // 5. Display the route
+            if (routeLayerGroup) routeLayerGroup.clearLayers();
+            routeLayerGroup = window.L.geoJSON(geoJson.features[0], {
+                style: {
+                    color: '#eab308', // Amber color for the route
+                    weight: 6,
+                    opacity: 0.7
+                },
+                onEachFeature: function(feature, layer) {
+                    layer.bindPopup(`Tour Distance: ${routeDistanceMiles.toFixed(2)} miles.<br>Stops: ${pointsToVisit.length} landmarks.`);
                 }
-                
-                if (!response || !response.ok) {
-                    throw new Error("Failed to get a successful response from ORS API after retries."); 
-                }
+            }).addTo(map);
 
+            // Fit map to the route boundaries
+            map.fitBounds(routeLayerGroup.getBounds().pad(0.1));
 
-                const geoJson = await response.json();
-                
-                // 6. Display the route
-                if (geoJson.features && geoJson.features.length > 0) {
-                    const routeFeature = geoJson.features[0];
-                    const routeDistanceKm = routeFeature.properties.summary.distance / 1000;
-                    const routeDistanceMiles = routeDistanceKm / MILES_TO_KM;
-                    
-                    if (routeLayerGroup) routeLayerGroup.clearLayers();
-                    routeLayerGroup = window.L.geoJSON(routeFeature, {
-                        style: {
-                            color: '#eab308', // Amber color for the route
-                            weight: 6,
-                            opacity: 0.7
-                        },
-                        onEachFeature: function(feature, layer) {
-                            layer.bindPopup(`Tour Distance: ${routeDistanceMiles.toFixed(2)} miles.<br>Stops: ${pointsToVisit.length} landmarks.`);
-                        }
-                    }).addTo(map);
-
-                    // Fit map to the route boundaries
-                    map.fitBounds(routeLayerGroup.getBounds().pad(0.1));
-
-                    updateStatus(`Tour created! Distance: ${routeDistanceMiles.toFixed(2)} miles, visiting ${pointsToVisit.length} landmarks.`, false, false, 'tourStatus');
-                } else {
-                    updateStatus("ORS could not calculate a route between the stops. Try moving your location or reducing the number of stops.", true, false, 'tourStatus');
-                }
-
-            } catch (error) {
-                console.error("Tour creation error:", error);
-                updateStatus(`Error generating tour: ${error.message.substring(0, 50)}...`, true, false, 'tourStatus');
-            }
+            updateStatus(`Tour created! Distance: ${routeDistanceMiles.toFixed(2)} miles, visiting ${pointsToVisit.length} landmarks.`, false, false, 'tourStatus');
         }
 
 
