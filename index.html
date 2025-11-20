@@ -175,8 +175,9 @@
         // ORS_API_KEY is configured for the tour feature.
         const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6Ijg1ZWRmZjY2Y2VkZTRkOWVhMmI4NDliNTMxOThhYTY0IiwiaCI6Im11cm11cjY0In0="; 
         
-        // ORS URL uses the generic endpoint, and the profile is passed in the body.
-        const ORS_URL_BASE = "https://api.openrouteservice.org/v2/directions/geojson";
+        // ORS URL Base without profile/geojson, which will be injected dynamically
+        const ORS_URL_BASE = "https://api.openrouteservice.org/v2/directions";
+        const ORS_PROFILE = "foot-walking"; // Mandatory profile as per user request
 
 
         // App State
@@ -582,8 +583,7 @@ out center;
 
             // 4. Construct the ORS payload 
             const orsPayload = {
-                // Profile is confirmed to be 'foot-walking'
-                profile: "foot-walking", 
+                // Profile is now in the URL, only send coordinates and options
                 coordinates: coords,
                 options: {
                     round_trip: { 
@@ -594,9 +594,9 @@ out center;
                 }
             };
             
-            // *** FIX: Pass API key as a query parameter instead of Authorization header ***
-            const orsUrlWithKey = `${ORS_URL_BASE}?api_key=${ORS_API_KEY}`;
-            console.log("ORS Request URL (with API key):", orsUrlWithKey);
+            // *** FIX: Inject the profile directly into the URL path as required by ORS V2 ***
+            const orsUrlWithKey = `${ORS_URL_BASE}/${ORS_PROFILE}/geojson?api_key=${ORS_API_KEY}`;
+            console.log("ORS Request URL (with Profile in path):", orsUrlWithKey);
 
 
             // 5. ORS API Request (Round Trip)
@@ -609,10 +609,10 @@ out center;
                 while (attempt < maxRetries) {
                     attempt++;
                     try {
-                        response = await fetch(orsUrlWithKey, { // Use URL with API key
+                        response = await fetch(orsUrlWithKey, { // Use URL with profile and API key
                             method: 'POST',
                             headers: {
-                                // Standard headers, OMITTING 'Authorization' HEADER
+                                // Omit Authorization header, as key is in URL
                                 'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8', 
                                 'Content-Type': 'application/json; charset=utf-8',
                             },
