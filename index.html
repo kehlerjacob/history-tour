@@ -70,6 +70,11 @@
             <label for="radiusSlider" class="text-white text-sm font-medium whitespace-nowrap">Search Radius:</label>
             <input type="range" id="radiusSlider" min="1" max="20" step="1" value="10" class="w-full md:w-48">
             <span id="radiusValue" class="text-white font-bold text-sm w-16 text-right">10 mi</span>
+
+            <!-- NEW: Compass Permission Button -->
+            <button id="compassPermissionButton" class="bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-bold py-2 px-3 rounded-lg shadow transition whitespace-nowrap hidden">
+                Enable Compass
+            </button>
         </div>
     </header>
 
@@ -142,18 +147,19 @@
 
         // App State
         let map = null;
-        let currentHeading = 0; // New state for device heading
+        let currentHeading = 0; 
         // Default to Washington D.C. (National Mall)
         let currentLat = 38.8893; 
         let currentLng = -77.0502;
         // Increased default radius to 10 miles for better chance of finding landmarks
         let currentRadiusMiles = 10; 
         let markersLayerGroup = null;
-        let userLocationMarker = null; // Marker for the initial GPS location
-        let searchRadiusCircle = null; // Circle to show the search area
-        const MILES_TO_METERS = 1609.34; // Conversion factor
+        let userLocationMarker = null; 
+        let searchRadiusCircle = null; 
+        const MILES_TO_METERS = 1609.34; 
         
         const landmarksStore = {};
+        let isCompassInitialized = false; // New state to prevent double initialization
 
         // --- FIREBASE SETUP ---
         function initializeFirebase() {
@@ -172,7 +178,7 @@
             }
         }
 
-        // --- GEOLOCATION & OVERPASS API UTILS ---
+        // --- GEOLOCATION & ORIENTATION UTILS ---
 
         function updateStatus(msg, isError = false, isContinuous = false) {
             const el = document.getElementById('locationStatus');
@@ -180,7 +186,7 @@
             const dot = el.querySelector('div');
             
             text.textContent = msg;
-            el.classList.remove('opacity-0');
+            el.classList.remove('opacity-0', 'pointer-events-none');
             
             if (isError) {
                 dot.classList.remove('bg-green-500', 'animate-pulse');
@@ -190,22 +196,18 @@
                 dot.classList.add('bg-green-500', 'animate-pulse');
             }
 
-            // Only hide after 4s if it's not continuous feedback (like the heading)
             if (!isContinuous) {
-                setTimeout(() => { el.classList.add('opacity-0'); }, 4000);
+                setTimeout(() => { el.classList.add('opacity-0', 'pointer-events-none'); }, 4000);
             }
         }
         
-        // Function to apply rotation to the user marker
         function updateMarkerRotation(heading) {
             if (userLocationMarker) {
                 const markerElement = userLocationMarker.getElement();
-                // Target the inner SVG to rotate only the arrow, not the entire Leaflet marker container
                 const svg = markerElement ? markerElement.querySelector('svg') : null;
                 
                 if (svg) {
-                    // Rotate the arrow by the magnetic heading. Since the SVG path is drawn 
-                    // pointing up (0 degrees North), we rotate by the heading angle.
+                    // We rotate the SVG element that contains the arrow based on the magnetic heading.
                     svg.style.transform = `rotate(${heading}deg)`;
                 }
             }
@@ -216,10 +218,9 @@
             if (userLocationMarker) map.removeLayer(userLocationMarker);
             
             // Custom Arrow Icon HTML (filled triangle pointing up)
-            // The padding and box-shadow create a nice white circle background
             const arrowSVG = `
                 <div style="background-color: white; border-radius: 50%; padding: 5px; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
-                    <svg viewBox="0 0 100 100" fill="#4f46e5" class="w-full h-full" style="width: 20px; height: 20px;">
+                    <svg viewBox="0 0 100 100" fill="#4f46e5" class="w-full h-full" style="width: 20px; height: 20px; transition: transform 0.1s ease-out;">
                         <!-- Triangle path pointing up -->
                         <path d="M50 10 L 90 90 L 10 90 Z" />
                     </svg>
@@ -228,8 +229,8 @@
 
             const userIcon = window.L.divIcon({
                 className: 'user-arrow-marker',
-                iconSize: [40, 40], // Size of the entire div icon container
-                iconAnchor: [20, 20], // Anchor at the center of the icon
+                iconSize: [40, 40], 
+                iconAnchor: [20, 20], 
                 html: arrowSVG
             });
             
@@ -238,35 +239,92 @@
             }).addTo(map)
               .bindPopup("Your Location & Heading");
             
-            // Apply initial rotation (or 0)
             updateMarkerRotation(currentHeading);
         }
         
+        // NEW: Function to handle the actual event listening after permission is granted
         function startOrientationTracking() {
+            if (isCompassInitialized) return;
+            isCompassInitialized = true;
+
             if (window.DeviceOrientationEvent) {
                 window.addEventListener('deviceorientation', (event) => {
                     let heading = null;
                     
-                    // iOS/Safari specific for true compass heading
                     if (event.webkitCompassHeading) {
+                        // iOS/Safari uses webkitCompassHeading (true North)
                         heading = event.webkitCompassHeading; 
                     } else if (event.alpha !== null) {
-                        // Standard alpha (magnetic North). We use 360 - alpha to match
-                        // the usual compass convention where 0 is North and rotation is clockwise.
+                        // Standard alpha (magnetic North). 360 - alpha is needed to get 
+                        // a standard compass heading (0=N, 90=E, 180=S, 270=W).
                         heading = 360 - event.alpha;
                     }
 
-                    if (heading !== null && Math.abs(heading - currentHeading) > 1) { // Only update if significant change (>1 degree)
+                    if (heading !== null && Math.abs(heading - currentHeading) > 1) { 
                         currentHeading = heading;
-                        // Update status continuously without the auto-hide timeout
                         updateStatus(`Loc: (${currentLat.toFixed(4)}, ${currentLng.toFixed(4)}) | Heading: ${currentHeading.toFixed(0)}°`, false, true); 
                         updateMarkerRotation(currentHeading);
                     }
                 }, false);
             } else {
                 console.warn("DeviceOrientationEvent not supported. Heading arrow rotation disabled.");
+                updateStatus("Compass feature unsupported on this device/browser.", true, true);
             }
         }
+
+        // NEW: Function to request compass permission (user must click a button)
+        async function requestCompassPermission() {
+            const button = document.getElementById('compassPermissionButton');
+            button.disabled = true;
+
+            // Check for the modern API needing user interaction
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const permissionState = await DeviceOrientationEvent.requestPermission();
+                    if (permissionState === 'granted') {
+                        startOrientationTracking();
+                        button.textContent = 'Compass Active';
+                        button.classList.remove('bg-indigo-500', 'hover:bg-indigo-400');
+                        button.classList.add('bg-green-600');
+                        updateStatus("Compass activated!", false);
+                    } else {
+                        updateStatus("Compass permission denied. Please check device settings.", true);
+                        button.textContent = 'Permission Denied';
+                        button.classList.remove('bg-indigo-500', 'hover:bg-indigo-400');
+                        button.classList.add('bg-red-500', 'hover:bg-red-400');
+                    }
+                } catch (error) {
+                    console.error("Error requesting orientation permission:", error);
+                    updateStatus("Error requesting compass permission.", true);
+                    button.textContent = 'Error';
+                    button.classList.remove('bg-indigo-500');
+                    button.classList.add('bg-red-500');
+                }
+            } else {
+                // Older browsers/Android/desktop may start automatically
+                startOrientationTracking();
+                button.textContent = 'Compass Active';
+                button.classList.remove('bg-indigo-500', 'hover:bg-indigo-400', 'hidden');
+                button.classList.add('bg-green-600');
+                updateStatus("Compass started automatically.", false);
+            }
+            button.disabled = false;
+        }
+
+        // NEW: Function to check if the permission button should be shown
+        function startPermissionCheck() {
+            const button = document.getElementById('compassPermissionButton');
+            // If the modern permission request API is available, show the button
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                button.classList.remove('hidden');
+                button.addEventListener('click', requestCompassPermission);
+                updateStatus("Tap 'Enable Compass' to see your heading.", false, true);
+            } else {
+                // Otherwise, try to start tracking immediately (old Android/Desktop behavior)
+                startOrientationTracking();
+            }
+        }
+
 
         function getUserLocation() {
             if (!navigator.geolocation) {
@@ -284,9 +342,7 @@
                     
                     if (map) {
                         map.setView([currentLat, currentLng], 14);
-                        // Add marker for initial GPS location
                         addUserMarker(); 
-                        // Start first search
                         fetchNearbyLandmarks();
                     }
                 },
@@ -450,9 +506,9 @@ out center;
 
             markersLayerGroup = window.L.layerGroup().addTo(map);
             
-            // Start location and orientation tracking
+            // Start location and permission check
             getUserLocation();
-            startOrientationTracking();
+            startPermissionCheck(); // New way to initiate compass
 
             setTimeout(() => map.invalidateSize(), 250);
         }
