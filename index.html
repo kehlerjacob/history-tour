@@ -242,8 +242,9 @@
             const latChange = radiusMiles / 69.0;
             const lngChange = radiusMiles / (69.0 * Math.cos(lat * Math.PI / 180));
             
-            // CRITICAL FIX: Rounding coordinates to 6 decimal places 
-            const precision = 6; 
+            // FIX: Reduce precision to 4 decimal places to avoid internal ArcGIS query errors
+            // This was the fix for the "Failed to execute query" error.
+            const precision = 4; 
             
             return {
                 xmin: (lng - lngChange).toFixed(precision),
@@ -286,7 +287,7 @@
             
             const baseUrl = "https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer/0/query";
             
-            // Changed output format to 'json' to avoid potential GeoJSON serialization issues on server
+            // Using 'json' format to avoid potential GeoJSON serialization issues on server
             const params = new URLSearchParams({
                 where: "1=1", 
                 geometry: bboxString,
@@ -296,7 +297,7 @@
                 outSR: "4326", 
                 outFields: "RESNAME,NRIS_Refnum,LISTED_DATE,ADDRESS,CITY,STATE",
                 returnGeometry: "true",
-                f: "json", // <-- CHANGED from geojson to json
+                f: "json", // Using ArcGIS JSON format
                 resultRecordCount: "100" // Limit to 100 to avoid overload
             });
 
