@@ -144,8 +144,7 @@
         let markersLayerGroup = null;
         let userLocationMarker = null; // Marker for the initial GPS location
         let searchRadiusCircle = null; // Circle to show the search area
-        let mapMoveTimer = null; // For debouncing map move events
-        const DEBOUNCE_DELAY = 750; // Debounce map move search by 750ms
+        // Removed mapMoveTimer and DEBOUNCE_DELAY since we no longer track map moves
         const MILES_TO_METERS = 1609.34; // Conversion factor
         
         const landmarksStore = {};
@@ -202,13 +201,14 @@
             
             userLocationMarker = window.L.marker([currentLat, currentLng], {icon: userIcon})
                 .addTo(map)
-                .bindPopup("Your GPS Location")
+                .bindPopup("Your Search Center")
                 .openPopup();
         }
 
         function getUserLocation() {
             if (!navigator.geolocation) {
                 updateStatus("Geolocation not supported", true);
+                // Even without GPS, we start the search at the default D.C. coordinates
                 if (map) fetchNearbyLandmarks(); 
                 return;
             }
@@ -238,22 +238,7 @@
             );
         }
         
-        // Handler to search when the map moves
-        function handleMapMove() {
-            clearTimeout(mapMoveTimer);
-            mapMoveTimer = setTimeout(() => {
-                if (!map) return;
-                const center = map.getCenter();
-                const precision = 6;
-                
-                // Update search center coordinates to the map center
-                currentLat = parseFloat(center.lat.toFixed(precision));
-                currentLng = parseFloat(center.lng.toFixed(precision));
-                
-                // Trigger search for the new center
-                fetchNearbyLandmarks();
-            }, DEBOUNCE_DELAY);
-        }
+        // Removed handleMapMove since we don't want the search center to move with the map
 
         function getBoundingBox(lat, lng, radiusMiles) {
             const latChange = radiusMiles / 69.0;
@@ -273,7 +258,7 @@
         async function fetchNearbyLandmarks() {
             if (!map) return;
             
-            // Update the search radius circle visualization
+            // Update the search radius circle visualization, keeping it centered on currentLat/Lng
             const radiusMeters = currentRadiusMiles * MILES_TO_METERS;
             if (searchRadiusCircle) {
                 searchRadiusCircle.setLatLng([currentLat, currentLng]).setRadius(radiusMeters);
@@ -286,6 +271,9 @@
                 }).addTo(map);
             }
             
+            // Also ensure the user marker stays at the center of the search (initial location)
+            addUserMarker();
+
             updateStatus(`Searching within ${currentRadiusMiles} mile(s) centered at (${currentLat.toFixed(4)}, ${currentLng.toFixed(4)})...`);
 
             const bbox = getBoundingBox(currentLat, currentLng, currentRadiusMiles);
@@ -309,7 +297,7 @@
             });
 
             const url = `${baseUrl}?${params.toString()}`;
-            console.log("Querying NPS API (Cleaned BBOX):", url); 
+            console.log("Querying NPS API (Fixed BBOX):", url); 
 
             try {
                 const response = await fetch(url);
@@ -407,8 +395,8 @@
 
             markersLayerGroup = window.L.layerGroup().addTo(map);
             
-            // Attach map move listener for interactive searching
-            map.on('moveend', handleMapMove);
+            // Removed: map.on('moveend', handleMapMove); 
+            // The map will no longer search when panned
 
             // Start location search
             getUserLocation();
@@ -427,10 +415,7 @@
         });
 
         slider.addEventListener('change', () => {
-            // Trigger search centered on the current map view
-            const center = map.getCenter();
-            currentLat = center.lat;
-            currentLng = center.lng;
+            // Trigger search using the FIXED initial coordinates (currentLat, currentLng)
             fetchNearbyLandmarks();
         });
 
