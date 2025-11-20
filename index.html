@@ -148,7 +148,8 @@
 
 
     <!-- Tour Panel (Hidden by default) -->
-    <div id="tourPanel" class="hidden absolute top-[10.5rem] right-4 bg-white p-4 rounded-xl shadow-2xl z-[4500] w-72">
+    <!-- Adjusted top position to 12rem and Z-index to 4900 for guaranteed visibility -->
+    <div id="tourPanel" class="hidden absolute top-[12rem] right-4 bg-white p-4 rounded-xl shadow-2xl z-[4900] w-72">
         <h3 class="font-bold text-lg text-indigo-700 mb-3 flex justify-between items-center">
             Configure Tour
             <button onclick="document.getElementById('tourPanel').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">
@@ -169,7 +170,7 @@
     <div id="map" class="flex-1 w-full bg-gray-200"></div>
 
     <!-- Location Status Bubble (REPOSITIONED & Compacted) -->
-    <div id="locationStatus" class="fixed top-[10.5rem] left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-xl z-[3500] flex items-center justify-center gap-3 transition-opacity duration-500 opacity-0 pointer-events-none w-11/12 max-w-3xl border border-gray-200">
+    <div id="locationStatus" class="fixed top-[6rem] left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-xl z-[3500] flex items-center justify-center gap-3 transition-opacity duration-500 opacity-0 pointer-events-none w-11/12 max-w-3xl border border-gray-200">
         <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse flex-shrink-0"></div>
         <span class="text-xs font-medium text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis" id="locationStatusText">Locating...</span>
     </div>
@@ -490,43 +491,51 @@
         }
 
         const createTour = (reset=false) => {
+            // Log for debugging
+            console.log("Attempting to create tour...");
+
             const maxDistanceMiles = parseFloat(document.getElementById('tourDistance').value);
             const maxDistanceMeters = maxDistanceMiles * 1609.34;
             
-            if (!userMarker && !reset) {
-                showMessage("Location Required", "Please allow location tracking or select a default location to start a tour.");
-                return;
-            }
-            
-            // Ensure there are pins from the GeoSearch
+            // 1. Check if we have enough pins loaded (tourPoints is populated by GeoSearch)
             if (tourPoints.length < 2) {
-                document.getElementById('tourStatus').textContent = 'Not enough landmarks found in range.';
-                showMessage("Tour Failed", `Only ${tourPoints.length} landmarks found. Please move the map or increase the radius.`);
+                document.getElementById('tourStatus').textContent = 'Error: Not enough landmarks loaded.';
+                showMessage("Tour Failed: No Pins", `Only ${tourPoints.length} landmarks found on the map. Please ensure the map is centered over a major city and try increasing the Radius (up to 20km) in the header.`);
+                console.error("Tour failed: Not enough pins loaded.");
                 return;
             }
 
-            // Reference point: User location if available, otherwise map center
+            // Reference point: User location (if available) or current map center (fallback)
             const refLatLong = userMarker ? userMarker.getLatLng() : map.getCenter();
             
-            // Filter landmarks within range
+            // 2. Filter landmarks within the specified tour distance range
             let potentialStops = tourPoints.filter(p => {
                 const distance = getDistance(refLatLong.lat, refLatLong.lng, p.lat, p.lon);
-                // Note: Max tour distance is miles based, GeoSearch distance is in meters
                 return distance <= maxDistanceMeters; 
             }).map(p => ({
                 ...p,
                 distance: getDistance(refLatLong.lat, refLatLong.lng, p.lat, p.lon)
             }));
 
+            // 3. Final check: do we have enough *local* stops for a tour?
             if (potentialStops.length < 2) {
-                document.getElementById('tourStatus').textContent = `Only ${potentialStops.length} pins available. Try increasing Max Tour Distance.`;
-                showMessage("Tour Failed", `Only ${potentialStops.length} landmarks found within ${maxDistanceMiles} miles. Try increasing the distance.`);
+                document.getElementById('tourStatus').textContent = `Error: Only ${potentialStops.length} pins available locally.`;
+                showMessage("Tour Failed: Pins Too Far", `Only ${potentialStops.length} landmarks found within ${maxDistanceMiles} miles of the starting point. Try increasing the Max Tour Distance in this panel.`);
+                console.error("Tour failed: Not enough pins found within max distance.");
                 return;
             }
             
-            // Simple optimization: Sort by proximity and select the 5 closest
+            // Sort by proximity and select the 5 closest
             potentialStops.sort((a, b) => a.distance - b.distance);
-            tourRoute = [refLatLong, ...potentialStops.slice(0, 5)]; // Start point + 5 closest pins
+
+            // Construct the final route: Start Point + 5 closest stops
+            tourRoute = [refLatLong, ...potentialStops.slice(0, 5).map(p => ({
+                lat: p.lat, 
+                lon: p.lon, 
+                title: p.title, 
+                isWiki: p.isWiki, 
+                url: p.url 
+            }))]; 
             currentTourStep = 0;
             
             // Draw Tour Route on map
@@ -534,37 +543,45 @@
             const routeCoordinates = tourRoute.map(p => L.latLng(p.lat, p.lon));
             tourPath = L.polyline(routeCoordinates, {color: 'green', weight: 4, opacity: 0.7}).addTo(map);
 
-            // Open Navigation Panel
+            // Open Navigation Panel and hide config
             document.getElementById('navigationPanel').classList.remove('translate-y-full', 'opacity-0');
             document.getElementById('tourPanel').classList.add('hidden');
             
             updateNavigationPanel();
             map.fitBounds(tourPath.getBounds(), {padding: [50, 50]});
+            console.log("Tour successfully created with", tourRoute.length - 1, "stops.");
         }
         
         const updateNavigationPanel = () => {
             if (!tourRoute || tourRoute.length <= 1) return;
             
-            document.getElementById('navStepCounter').textContent = `${currentTourStep}/${tourRoute.length - 1}`;
+            const totalStops = tourRoute.length - 1; 
+            document.getElementById('navStepCounter').textContent = `${currentTourStep}/${totalStops}`;
 
             if (currentTourStep === 0) {
-                // Step 0: Initial state - user is at the starting point. Button MUST be enabled to advance.
+                // Step 0: Initial state - User is at the starting point.
                 const nextStop = tourRoute[1];
                 document.getElementById('currentNavInstruction').textContent = "Tour Ready: Welcome!";
-                document.getElementById('nextLandmarkInfo').innerHTML = `Press 'Start Navigation' to proceed to your first stop: <span class="font-bold">${nextStop.title}</span>.`;
+                document.getElementById('nextLandmarkInfo').innerHTML = `Press <span class="font-bold">'Start Navigation'</span> to proceed to your first stop: <span class="font-bold">${nextStop.title}</span>.`;
                 document.getElementById('navActionButton').textContent = "Start Navigation";
-                document.getElementById('navActionButton').disabled = false; // FIX: Button enabled to advance to first stop
+                document.getElementById('navActionButton').disabled = false; // Enabled to advance to first stop
                 
                 // Pan map to the first actual destination
                 map.panTo([nextStop.lat, nextStop.lon]);
             } else if (currentTourStep < tourRoute.length) {
-                // Mid-tour steps (currentTourStep is the landmark we are tracking towards)
+                // Mid-tour steps (currentTourStep is the index of the landmark we are tracking towards)
                 const target = tourRoute[currentTourStep];
-                const nextStop = tourRoute[currentTourStep + 1];
+                const nextStop = tourRoute[currentTourStep + 1]; 
                 
-                document.getElementById('currentNavInstruction').textContent = `Landmark ${currentTourStep}: ${target.title}`;
+                document.getElementById('currentNavInstruction').textContent = `Landmark ${currentTourStep}/${totalStops}: ${target.title}`;
                 
-                let nextText = `Next Stop: <span class="font-bold">${nextStop ? nextStop.title : 'Tour Complete!'}</span>`;
+                let nextText;
+                if (nextStop) {
+                    nextText = `Next Stop: <span class="font-bold">${nextStop.title}</span>`;
+                } else {
+                    nextText = 'Final Stop! Press Next Stop once you arrive to complete the tour.';
+                }
+                
                 if (target.isWiki) {
                     nextText += ` <a href="${target.url}" target="_blank" class="text-white underline hover:text-green-200">(Wiki Info)</a>`;
                 }
@@ -576,7 +593,7 @@
                 // Pan map to current target
                 map.panTo([target.lat, target.lon]);
             } else {
-                // Tour finished
+                // Tour finished (currentTourStep === tourRoute.length)
                 document.getElementById('currentNavInstruction').textContent = "Tour Completed!";
                 document.getElementById('nextLandmarkInfo').textContent = "You've visited all designated historic points!";
                 document.getElementById('navActionButton').textContent = "End Tour";
@@ -586,6 +603,7 @@
         
         const nextSegment = () => {
              if (currentTourStep < tourRoute.length - 1) {
+                // Advance to the next landmark
                 currentTourStep++;
                 updateNavigationPanel();
             } else if (currentTourStep === tourRoute.length - 1) {
@@ -599,24 +617,25 @@
         }
 
         const checkTourProgress = (userLatLong) => {
-            // FIX: Skip distance check if we are at the start point (step 0)
-            if (!tourRoute || currentTourStep >= tourRoute.length || currentTourStep === 0) return;
+            // We only track distance if we are aiming for a landmark (currentTourStep >= 1)
+            if (!tourRoute || currentTourStep === 0 || currentTourStep >= tourRoute.length) return;
 
             const target = tourRoute[currentTourStep];
-            const distanceToTarget = getDistance(userLatLong[0], userLatLong[1], target.lat, target.lon);
+            const userLat = userLatLong[0];
+            const userLon = userLatLong[1];
+
+            const distanceToTarget = getDistance(userLat, userLon, target.lat, target.lon);
             const arrivalThreshold = 50; // 50 meters
 
             if (distanceToTarget < arrivalThreshold) {
                 document.getElementById('navActionButton').disabled = false;
-                document.getElementById('currentNavInstruction').textContent = `ARRIVED: ${target.title || 'Landmark'}`;
+                document.getElementById('currentNavInstruction').textContent = `ARRIVED: ${target.title}`;
                 document.getElementById('nextLandmarkInfo').textContent = `You have arrived at this location. Press 'Next Stop' to continue the tour.`;
             } else {
                 const distanceKm = (distanceToTarget / 1000).toFixed(2);
                 document.getElementById('navActionButton').disabled = true;
-                // Only show distance tracking if we are on a step that is a landmark (currentTourStep >= 1)
-                if (currentTourStep > 0) { 
-                     document.getElementById('nextLandmarkInfo').textContent = `Distance to ${target.title}: ${distanceKm} km.`;
-                }
+                // Update distance info
+                document.getElementById('nextLandmarkInfo').textContent = `Distance to ${target.title}: ${distanceKm} km.`;
             }
         }
 
