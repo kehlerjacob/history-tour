@@ -22,6 +22,10 @@
         .leaflet-container {
             font-family: 'Inter', sans-serif;
         }
+        /* Custom styles for the map pin images loaded by Leaflet's default marker logic */
+        .leaflet-default-icon-path {
+            background-image: url('https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png');
+        }
         input[type=range] {
             -webkit-appearance: none; 
             background: transparent; 
@@ -186,6 +190,7 @@
             if (!map) return;
             if (userLocationMarker) map.removeLayer(userLocationMarker);
             
+            // Custom blue dot for user location
             const userIcon = window.L.divIcon({
                 className: 'bg-blue-600 border-2 border-white rounded-full shadow-xl',
                 iconSize: [16, 16],
@@ -329,14 +334,9 @@
                 markersLayerGroup.clearLayers();
             }
 
-            // Icon styling with hardcoded colors
-            const historicIcon = window.L.divIcon({
-                className: 'bg-transparent',
-                html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32" fill="#4f46e5" stroke="#ffffff" stroke-width="2" style="filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.3));"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm0 8.625a1.125 1.125 0 100 2.25 1.125 1.125 0 000-2.25zM15.375 12a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM7.5 10.5a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zm10.5-1.5a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5z" clip-rule="evenodd" /></svg>`,
-                iconSize: [32, 32],
-                iconAnchor: [16, 32],
-                popupAnchor: [0, -32]
-            });
+            // NOTE: We are intentionally NOT creating a custom icon here.
+            // Using the default L.marker() relies on Leaflet's built-in icons 
+            // which are the classic blue map pins.
 
             features.forEach(feature => {
                 // Safety check for geometry
@@ -353,7 +353,8 @@
                 const lng = coords[0];
                 const name = props.RESNAME || "Historic Site";
 
-                const marker = window.L.marker([lat, lng], { icon: historicIcon })
+                // Use default Leaflet marker (classic blue pin)
+                const marker = window.L.marker([lat, lng]) 
                     .bindPopup(
                         `<div class="text-center p-2">
                             <h4 class="font-bold text-indigo-700 mb-2 text-sm">${name}</h4>
