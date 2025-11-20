@@ -142,9 +142,11 @@
         let currentLng = -77.0502;
         let currentRadiusMiles = 5; // Increased default radius
         let markersLayerGroup = null;
-        let userLocationMarker = null;
+        let userLocationMarker = null; // Marker for the initial GPS location
+        let searchRadiusCircle = null; // Circle to show the search area
         let mapMoveTimer = null; // For debouncing map move events
         const DEBOUNCE_DELAY = 750; // Debounce map move search by 750ms
+        const MILES_TO_METERS = 1609.34; // Conversion factor
         
         const landmarksStore = {};
 
@@ -188,6 +190,7 @@
 
         function addUserMarker() {
             if (!map) return;
+            // The user's initial location is stored in currentLat/currentLng when GPS succeeds
             if (userLocationMarker) map.removeLayer(userLocationMarker);
             
             // Custom blue dot for user location
@@ -199,7 +202,7 @@
             
             userLocationMarker = window.L.marker([currentLat, currentLng], {icon: userIcon})
                 .addTo(map)
-                .bindPopup("You are here")
+                .bindPopup("Your GPS Location")
                 .openPopup();
         }
 
@@ -219,7 +222,9 @@
                     
                     if (map) {
                         map.setView([currentLat, currentLng], 14);
+                        // Add marker for initial GPS location
                         addUserMarker(); 
+                        // Start first search
                         fetchNearbyLandmarks();
                     }
                 },
@@ -233,7 +238,7 @@
             );
         }
         
-        // New handler to search when the map moves
+        // Handler to search when the map moves
         function handleMapMove() {
             clearTimeout(mapMoveTimer);
             mapMoveTimer = setTimeout(() => {
@@ -241,12 +246,12 @@
                 const center = map.getCenter();
                 const precision = 6;
                 
-                // Only re-search if the center has changed significantly since the last known search location
-                if (Math.abs(center.lat - currentLat) > 1e-6 || Math.abs(center.lng - currentLng) > 1e-6) {
-                    currentLat = parseFloat(center.lat.toFixed(precision));
-                    currentLng = parseFloat(center.lng.toFixed(precision));
-                    fetchNearbyLandmarks();
-                }
+                // Update search center coordinates to the map center
+                currentLat = parseFloat(center.lat.toFixed(precision));
+                currentLng = parseFloat(center.lng.toFixed(precision));
+                
+                // Trigger search for the new center
+                fetchNearbyLandmarks();
             }, DEBOUNCE_DELAY);
         }
 
@@ -254,7 +259,7 @@
             const latChange = radiusMiles / 69.0;
             const lngChange = radiusMiles / (69.0 * Math.cos(lat * Math.PI / 180));
             
-            // CRITICAL FIX: Rounding coordinates to 6 decimal places to prevent ArcGIS server parsing errors (400 Bad Request)
+            // CRITICAL FIX: Rounding coordinates to 6 decimal places 
             const precision = 6; 
             
             return {
@@ -267,6 +272,19 @@
 
         async function fetchNearbyLandmarks() {
             if (!map) return;
+            
+            // Update the search radius circle visualization
+            const radiusMeters = currentRadiusMiles * MILES_TO_METERS;
+            if (searchRadiusCircle) {
+                searchRadiusCircle.setLatLng([currentLat, currentLng]).setRadius(radiusMeters);
+            } else {
+                searchRadiusCircle = window.L.circle([currentLat, currentLng], {
+                    color: 'indigo',
+                    fillColor: '#818cf8',
+                    fillOpacity: 0.1,
+                    radius: radiusMeters
+                }).addTo(map);
+            }
             
             updateStatus(`Searching within ${currentRadiusMiles} mile(s) centered at (${currentLat.toFixed(4)}, ${currentLng.toFixed(4)})...`);
 
@@ -333,10 +351,6 @@
             } else {
                 markersLayerGroup.clearLayers();
             }
-
-            // NOTE: We are intentionally NOT creating a custom icon here.
-            // Using the default L.marker() relies on Leaflet's built-in icons 
-            // which are the classic blue map pins.
 
             features.forEach(feature => {
                 // Safety check for geometry
@@ -433,8 +447,9 @@
             
             let dateStr = "Unknown";
             if (data.LISTED_DATE) {
+                // LISTED_DATE is a Unix timestamp in milliseconds
                 const dateObj = new Date(data.LISTED_DATE);
-                if (!isNaN(dateObj)) dateStr = dateObj.toLocaleDateString();
+                if (!isNaN(dateObj.getTime())) dateStr = dateObj.toLocaleDateString();
                 else dateStr = data.LISTED_DATE;
             }
             document.getElementById('dataListed').textContent = dateStr;
