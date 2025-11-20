@@ -95,13 +95,13 @@
         </h3>
         <label for="tourDistance" class="block text-sm font-medium text-gray-700 mb-1">Desired Total Distance (Miles):</label>
         <div class="flex gap-2">
-            <!-- Distance input is now mostly for context/guidance, but we won't use it to force round_trip -->
-            <input type="number" id="tourDistance" min="1" max="15" value="5" step="0.5" class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5" disabled title="Distance not used for route calculation in point-to-point tours.">
+            <!-- Distance input is now used to filter which pins are included in the tour -->
+            <input type="number" id="tourDistance" min="1" max="15" value="5" step="0.5" class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5">
             <button onclick="createTour()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition flex-shrink-0">
                 Create
             </button>
         </div>
-        <p id="tourStatus" class="text-xs mt-2 text-gray-500">The tour will connect up to 7 closest landmarks and return to your start point.</p>
+        <p id="tourStatus" class="text-xs mt-2 text-gray-500">Filters pins by distance and connects up to 7 closest stops for a loop tour.</p>
     </div>
 
     <!-- Map Container -->
@@ -546,7 +546,7 @@ out center;
 
         window.createTour = async function() {
             
-            // Although we aren't using this distance to force a round_trip length, we use it for validation
+            // Get user's desired distance
             const desiredDistanceMiles = parseFloat(document.getElementById('tourDistance').value);
             if (isNaN(desiredDistanceMiles) || desiredDistanceMiles <= 0) {
                 updateStatus("Please enter a valid distance.", true, false, 'tourStatus');
@@ -558,34 +558,47 @@ out center;
             // 1. Get the list of all historic sites
             const allLandmarks = Object.values(landmarksStore);
             if (allLandmarks.length === 0) {
-                 updateStatus("No landmarks found. Please ensure the map has points before starting a tour.", true, false, 'tourStatus');
+                 updateStatus("No landmarks found. Please ensure the map has pins before starting a tour.", true, false, 'tourStatus');
                  return;
             }
 
-            // 2. Select landmarks: Sort by distance and select the closest N points for the tour stops.
-            const MAX_STOPS = 7; // Max intermediate stops for a reasonable tour path
+            // 2. Select landmarks: Sort by distance, filter by desired distance, and limit the stops.
+            const MAX_STOPS = 7; // Max intermediate stops for a reliable ORS response
             
-            // Sort all landmarks by distance from user (closest first)
-            const sortedLandmarks = allLandmarks.sort((a, b) => a.distanceMiles - b.distanceMiles);
+            // Heuristic: Straight-line distance to any pin should be no more than 50% of the desired total walking distance.
+            const MAX_STRAIGHT_LINE_DISTANCE = desiredDistanceMiles / 2; 
+            
+            // Filter first: only keep pins within the max straight-line distance
+            const filteredLandmarks = allLandmarks.filter(
+                lm => lm.distanceMiles <= MAX_STRAIGHT_LINE_DISTANCE
+            );
 
-            // Select the closest stops
+            // Sort filtered landmarks by distance from user (closest first)
+            const sortedLandmarks = filteredLandmarks.sort((a, b) => a.distanceMiles - b.distanceMiles);
+
+            // Select the closest stops, up to MAX_STOPS
             const pointsToVisit = sortedLandmarks.slice(0, Math.min(sortedLandmarks.length, MAX_STOPS));
 
             if (pointsToVisit.length === 0) {
-                 updateStatus("Need at least 1 landmark to create a tour loop.", true, false, 'tourStatus');
-                 return;
+                let statusMessage = "The desired tour distance is too short to include any nearby pins.";
+                if (allLandmarks.length > 0) {
+                     statusMessage += ` Try increasing the distance above ${Math.ceil(allLandmarks[0].distanceMiles * 2)} miles.`;
+                }
+                updateStatus(statusMessage, true, false, 'tourStatus');
+                return;
             }
 
             // 3. Prepare coordinates for OpenRouteService (Lng, Lat format)
-            // The route MUST be: Start -> L1 -> L2 -> ... -> LN -> Start
+            // The route MUST be: Start -> Closest_L1 -> Closest_L2 -> ... -> Closest_LN -> Start (Loop)
             const coords = [];
             
             // Start point (user location)
             coords.push([currentLng, currentLat]); 
             
-            // Intermediate stops (the landmarks)
-            pointsToVisit.forEach(lm => {
+            // Intermediate stops (the landmarks, already sorted by proximity)
+            pointsToVisit.forEach((lm, index) => {
                 coords.push([lm.lon, lm.lat]);
+                console.log(`Tour Stop ${index + 1}: ${lm.tags.name || lm.tags.historic || 'Landmark'} at ${lm.distanceMiles.toFixed(2)} mi.`);
             });
             
             // End point (back to user location)
