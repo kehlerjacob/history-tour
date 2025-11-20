@@ -3,903 +3,173 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Historic Landmark Map with Real-Time GeoSearch</title>
+    <title>Mobile Compass</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-    
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-
-    <!-- Leaflet Polyline Decoders/Encoders - required for OSRM routes -->
-    <script src="https://unpkg.com/@mapbox/polyline@1.0.0/src/polyline.js"></script>
-
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-        
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f7f9fc;
+        /* Using Inter font for better readability */
+        :root { font-family: 'Inter', sans-serif; }
+        /* Keyframes for a smooth pointer update effect */
+        .compass-pointer {
+            transition: transform 0.1s ease-out;
         }
-        .leaflet-container {
-            font-family: 'Inter', sans-serif;
-        }
-        .leaflet-default-icon-path {
-            /* Standard marker path, kept for fallback */
-            background-image: url('https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png');
-        }
-        input[type=range] {
-            -webkit-appearance: none; 
-            background: transparent; 
-        }
-        input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            height: 16px;
-            width: 16px;
-            border-radius: 50%;
-            background: #ffffff;
-            cursor: pointer;
-            margin-top: -6px; 
-            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-        }
-        input[type=range]::-webkit-slider-runnable-track {
-            width: 100%;
-            height: 4px;
-            cursor: pointer;
-            background: #a5b4fc; 
-            border-radius: 2px;
-        }
-
-        /* User Marker Arrow (The blue circle container) */
-        .user-arrow-marker {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 40px !important;
-            height: 40px !important;
-            margin-left: -20px !important;
-            margin-top: -20px !important;
-            position: relative; /* Needed for absolute positioning of the triangle */
-        }
-        
-        /* The Rotating White Triangle Indicator */
-        #userDirectionArrow {
-            position: absolute;
-            /* Pivot point: slightly below the geometric center to place the tip visually correct */
-            transform-origin: 50% 75%; 
-            
-            /* Create the triangle shape using CSS borders */
-            width: 0;
-            height: 0;
-            border-style: solid;
-            border-width: 0 6px 14px 6px; /* 14px height, 12px base width */
-            border-color: transparent transparent #ffffff transparent; /* White tip pointing up */
-            
-            /* Adjust position to center the pivot point */
-            margin-top: -10px; 
-            transition: transform 0.3s ease-out; /* Smooth rotation */
-        }
-
-        /* Message Box for custom alerts */
-        #messageBox {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 5000;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            pointer-events: none;
-        }
-        #messageBox.visible {
-            opacity: 1;
-            pointer-events: auto;
-        }
-        
-        /* HIDE LEAFLET ZOOM CONTROLS FOR A CLEANER UI */
-        .leaflet-control-zoom {
-            display: none !important;
-        }
-
-        /* Icon styling for navigation instructions */
-        .nav-icon {
-            display: inline-block;
-            width: 1.5rem;
-            height: 1.5rem;
-            margin-right: 0.5rem;
-            vertical-align: middle;
-        }
-
     </style>
 </head>
-<body class="flex flex-col h-screen overflow-hidden">
+<body class="bg-gray-900 text-white min-h-screen flex items-center justify-center p-4">
 
-    <!-- Message Box (Custom Alert) -->
-    <div id="messageBox" class="p-6 bg-white rounded-xl shadow-2xl max-w-sm w-full">
-        <h3 id="messageTitle" class="text-lg font-bold mb-2 text-gray-800">Alert</h3>
-        <p id="messageText" class="text-sm text-gray-600 mb-4">Content</p>
-        <button onclick="document.getElementById('messageBox').classList.remove('visible')" class="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700">
-            OK
-        </button>
-    </div>
+    <div id="app" class="w-full max-w-sm bg-gray-800 p-6 rounded-xl shadow-2xl flex flex-col items-center">
+        <h1 class="text-3xl font-bold mb-4 text-emerald-400">Digital Compass</h1>
 
-    <!-- Header (Compacted) -->
-    <header class="bg-indigo-600 shadow-xl z-[4000] p-3 flex flex-col gap-3 flex-none relative">
-        
-        <!-- Title and Controls Row 1 -->
-        <div class="flex flex-col md:flex-row items-center justify-between gap-3">
-            <div class="text-center md:text-left">
-                <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer</h1>
-                <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
-            </div>
-
-            <!-- Controls Group Row 1 -->
-            <div class="flex flex-wrap items-center justify-center gap-3">
-                 
-                 <!-- Location Dropdown -->
-                 <div class="relative">
-                    <button onclick="document.getElementById('locationDropdown').classList.toggle('hidden')" class="bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-bold py-2 px-3 rounded-lg shadow transition flex items-center gap-1">
-                        <span>Location</span>
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                    </button>
-                    <!-- Dropdown Menu -->
-                    <div id="locationDropdown" class="hidden absolute top-full right-0 mt-2 w-48 bg-white rounded-lg shadow-xl py-2 z-50 border border-gray-100">
-                        <button onclick="changeLocation(38.8893, -77.0502, 'Washington D.C.'); document.getElementById('locationDropdown').classList.add('hidden')" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50">Washington D.C.</button>
-                        <button onclick="changeLocation(40.7580, -73.9855, 'Midtown Manhattan'); document.getElementById('locationDropdown').classList.add('hidden')" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50">Midtown Manhattan</button>
-                        <button onclick="changeLocation(51.5074, 0.1278, 'London'); document.getElementById('locationDropdown').classList.add('hidden')" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50">London, UK</button>
-                    </div>
-                 </div>
-                 
-                <!-- Enable Compass Button (FALLBACK ONLY - Hidden initially) -->
-                 <button id="enableCompassBtn" onclick="handleCompassPermissionRequest()" class="bg-yellow-500 hover:bg-yellow-600 text-gray-900 text-xs font-bold py-2 px-3 rounded-lg shadow transition whitespace-nowrap hidden">
-                    Enable Compass
-                </button>
-
-                <!-- Tour Button -->
-                <button id="startTourButton" onclick="openTourPanel()" class="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold py-2 px-3 rounded-lg shadow transition whitespace-nowrap">
-                    Start Tour
-                </button>
-            </div>
-        </div>
-
-        <!-- Filter Row 2 (Full Width) -->
-        <div class="flex items-center gap-3 w-full max-w-4xl mx-auto">
-            
-             <!-- Category Filter Input -->
-            <div class="flex-grow bg-indigo-700 rounded-lg p-2 flex items-center gap-2 w-full">
-                <label for="categoryFilter" class="text-white text-xs font-medium whitespace-nowrap hidden sm:block">Filter by Keyword:</label>
-                <input type="text" id="categoryFilter" placeholder="e.g., house, museum, park (5km Search Radius)" 
-                       onchange="fetchAndPinLandmarks()"
-                       class="w-full p-1 bg-indigo-800 text-white placeholder-indigo-300 text-xs rounded-md focus:ring-indigo-300 focus:border-indigo-300">
-            </div>
-        </div>
-    </header>
-
-
-    <!-- Tour Panel (Hidden by default) -->
-    <div id="tourPanel" class="hidden absolute top-[13rem] right-4 bg-white p-4 rounded-xl shadow-2xl z-[4900] w-72">
-        <h3 class="font-bold text-lg text-indigo-700 mb-3 flex justify-between items-center">
-            Configure Tour
-            <button onclick="document.getElementById('tourPanel').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        <!-- Status and Enable Button -->
+        <div id="status-area" class="w-full mb-6 flex justify-center">
+            <button id="enable-button" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition duration-200 shadow-md">
+                Enable Compass
             </button>
-        </h3>
-        <label for="tourDistance" class="block text-sm font-medium text-gray-700 mb-1">Max Tour Distance (Miles):</label>
-        <div class="flex gap-2">
-            <input type="number" id="tourDistance" min="1" max="15" value="5" step="0.5" class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5">
-            <button onclick="createTour(true)" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition flex-shrink-0" id="tourConfigBtn">
-                Create
-            </button>
+            <p id="status-message" class="hidden text-sm text-center text-red-400 p-2 rounded-lg bg-gray-700/50 w-full">
+                Waiting for permission...
+            </p>
         </div>
-        <p id="tourStatus" class="text-xs mt-2 text-gray-500">Finds closest pins and optimizes for distance.</p>
-    </div>
-    
-    <!-- Map Container -->
-    <div id="map" class="flex-1 w-full bg-gray-200"></div>
 
-    <!-- Location Status Bubble (REPOSITIONED & Compacted) -->
-    <div id="locationStatus" class="fixed top-[9rem] sm:top-[6rem] left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-xl z-[3500] flex items-center justify-center gap-3 transition-opacity duration-500 opacity-0 pointer-events-none w-11/12 max-w-3xl border border-gray-200">
-        <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse flex-shrink-0"></div>
-        <span class="text-xs font-medium text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis" id="locationStatusText">Locating...</span>
-    </div>
-
-    <!-- NAVIGATION PANEL (Green Bar - Fixed to Bottom) -->
-    <div id="navigationPanel" class="fixed inset-x-0 bottom-0 bg-green-600 text-white p-4 sm:p-6 shadow-2xl rounded-t-3xl transition-all duration-300 transform translate-y-full opacity-0 z-[5000] h-48 sm:h-auto">
-        <div class="max-w-xl mx-auto flex flex-col h-full">
-
-            <!-- Current Step Display -->
-            <div class="flex items-start space-x-3 mb-2">
-                <svg id="navInstructionIcon" class="w-6 h-6 flex-shrink-0 mt-1" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.41-7-7.38 0-.47.05-.93.14-1.39l5.86 5.86v2.91zm5.93-5.07l-5.86-5.86c.46-.09.92-.14 1.39-.14 3.97 0 6.89 3.05 7.38 7zm-5.93-10.79l5.86 5.86c-.46.09-.92-.14 1.39-.14-3.97 0-6.89-3.05-7.38-7zm-5.93 5.07l5.86 5.86c-.46.09-.92-.14-1.39-.14-3.97 0-6.89-3.05-7.38-7z"/></svg>
-                <h2 id="currentNavInstruction" class="text-xl sm:text-2xl font-semibold leading-tight">Waiting for Tour...</h2>
-            </div>
-            
-            <!-- Next Steps & Progress -->
-            <div class="flex justify-between items-end mt-1 mb-4 border-t border-green-500 pt-3">
-                <p id="nextLandmarkInfo" class="text-sm opacity-90 leading-relaxed max-w-[70%]">Next: Please start a tour using the button above.</p>
-                <p id="navStepCounter" class="text-sm font-medium opacity-80 flex-shrink-0 ml-4">0/0</p>
+        <!-- Compass Display -->
+        <div class="relative w-64 h-64 mb-6">
+            <!-- Compass Rose (Background) -->
+            <div class="absolute inset-0 rounded-full bg-gray-900 border-8 border-gray-700 shadow-inner flex items-center justify-center">
+                <!-- Cardinal Points -->
+                <div class="absolute top-0 w-2 h-4 bg-red-500 rounded-b-full"></div>
+                <span class="absolute top-4 text-xl font-bold text-red-500">N</span>
+                <span class="absolute right-4 top-1/2 -translate-y-1/2 text-lg text-gray-400">E</span>
+                <span class="absolute bottom-4 text-lg text-gray-400">S</span>
+                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-lg text-gray-400">W</span>
             </div>
 
-            <!-- Action Button -->
-            <div class="flex-grow flex items-end">
-                <button id="navActionButton" onclick="nextSegment()" class="w-full bg-white text-green-600 font-bold py-3 px-6 rounded-xl hover:bg-gray-100 transition duration-200 shadow-lg">
-                    Next Stop
-                </button>
+            <!-- Compass Pointer (Needle) -->
+            <div id="compass-pointer" class="compass-pointer absolute inset-0 flex items-center justify-center transform rotate-0">
+                <div class="w-0 h-0 border-l-[10px] border-r-[10px] border-b-[100px] border-l-transparent border-r-transparent border-b-red-500 transform -translate-y-1/2 absolute top-1/2" style="transform-origin: 50% 100%;"></div>
+                <div class="w-4 h-4 rounded-full bg-gray-200 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 border-2 border-gray-700"></div>
+                <div class="w-0 h-0 border-l-[10px] border-r-[10px] border-b-[100px] border-l-transparent border-r-transparent border-b-gray-400 rotate-180 transform -translate-y-1/2 absolute top-1/2" style="transform-origin: 50% 100%;"></div>
             </div>
         </div>
+
+        <!-- Heading Display -->
+        <div class="flex flex-col items-center">
+            <p class="text-4xl font-extrabold text-white mb-1">
+                <span id="heading-value">N/A</span>°
+            </p>
+            <p id="cardinal-direction" class="text-xl font-semibold text-emerald-300">
+                Waiting...
+            </p>
+        </div>
+
     </div>
 
-
-    <script>
-        // Global State
-        let map;
-        let userMarker = null;
-        let landmarkMarkers = new L.LayerGroup();
-        let tourRoute = null; // Array of {lat, lon, title, steps, ...} objects
-        let tourPath = null; // The Leaflet Polyline/Route object
-        let tourPoints = []; // Populated by GeoSearch
-        const WIKIPEDIA_API_URL = 'https://en.wikipedia.org/w/api.php';
-        // Using OSRM Public Server for routing
-        const OSRM_API_URL = 'https://router.project-osrm.org/route/v1/foot/'; 
-        let isFetching = false; // Prevent multiple concurrent fetches
-        
-        let currentTourStep = 0; // 0 = ready to start, 1+ = navigating to this stop index
-        let watchingPosition = false;
-        let watchId = null;
-        let currentManeuverIndex = -1; // Index of the next maneuver in the OSRM steps array
-
-        // NEW: State for compass permission
-        let isCompassPermissionRequested = false; 
-
-        // CONSTANT: Fixed search radius in kilometers (5 miles is approx 8.04672 km, sticking to 5km for precision)
-        const FIXED_SEARCH_RADIUS_KM = 5;
-
-        // Custom Marker Icon for User Location (Simple Arrow)
-        const userArrowIcon = L.divIcon({
-            className: 'user-arrow-marker bg-indigo-600 rounded-full border-4 border-white shadow-xl',
-            iconSize: [40, 40],
-            // HTML for the CSS triangle indicator
-            html: '<div id="userDirectionArrow"></div>',
-            popupAnchor: [0, -10]
-        });
-
-        // Landmark Marker Icon (A simple red dot for historic sites)
-        const landmarkIcon = L.divIcon({
-            className: 'bg-red-600 rounded-full border-2 border-white shadow-lg',
-            iconSize: [12, 12]
-        });
-
-        // Utility: Custom Alert/Modal Box
-        const showMessage = (title, text) => {
-            document.getElementById('messageTitle').textContent = title;
-            document.getElementById('messageText').textContent = text;
-            document.getElementById('messageBox').classList.add('visible');
-        };
-
-        // Utility: Exponential Backoff for Fetch
-        const fetchWithRetry = async (url, options = {}, retries = 3) => {
-            for (let i = 0; i < retries; i++) {
-                try {
-                    const response = await fetch(url, options);
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return await response.json();
-                } catch (error) {
-                    if (i < retries - 1) {
-                        const delay = Math.pow(2, i) * 1000;
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                    } else {
-                        throw error;
-                    }
-                }
-            }
-        };
-
-        // Utility: Haversine distance calculation in meters
-        const getDistance = (lat1, lon1, lat2, lon2) => {
-            const R = 6371e3; // metres
-            const φ1 = lat1 * Math.PI/180; 
-            const φ2 = lat2 * Math.PI/180;
-            const Δφ = (lat2-lat1) * Math.PI/180;
-            const Δλ = (lon2-lon1) * Math.PI/180;
-
-            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                      Math.cos(φ1) * Math.cos(φ2) *
-                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-            return R * c; // Distance in meters
+    <script type="text/javascript">
+        // Helper to convert degree to Cardinal direction
+        function degToCard(deg) {
+            if (deg === null) return 'N/A';
+            const val = Math.floor((deg / 22.5) + 0.5);
+            const arr = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+            return arr[(val % 16)];
         }
 
-        // --- UPDATED: COMPASS PERMISSION LOGIC ---
+        // Main logic to handle the DeviceOrientation event
+        function handleOrientation(event) {
+            let magneticHeading = null;
 
-        /**
-         * Requests permission to access Device Orientation data (compass/sensors).
-         * Required for iOS Safari/Chrome (13+). Also acts as a retry if initially denied.
-         */
-        const handleCompassPermissionRequest = () => {
-            const btn = document.getElementById('enableCompassBtn');
-            btn.classList.add('hidden'); // Hide the button while requesting
+            // 1. Check for webkitCompassHeading (preferred, often more accurate on iOS Safari)
+            if (event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
+                // webkitCompassHeading gives the magnetic North in degrees (0 to 360)
+                // We want 0 degrees to be North, so we use the value directly.
+                magneticHeading = event.webkitCompassHeading;
+            }
+            // 2. Fallback to standard alpha (needs adjustment based on screen orientation)
+            else if (event.alpha !== undefined && event.alpha !== null) {
+                let alpha = event.alpha;
+                let screenOrientation = window.orientation || 0; // 0, 90, -90, 180
 
-            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                DeviceOrientationEvent.requestPermission()
-                    .then(permissionState => {
+                // Adjust the alpha value based on device orientation (landscape vs portrait)
+                // The 'alpha' value is the rotation relative to the phone's top edge
+                // when the phone is flat (usually 0 is North).
+                
+                // For a compass, we typically want the rotation to be relative to the North pole (0 degrees).
+                // The 'alpha' angle is usually the rotation around the Z-axis, with 0 being North.
+                // However, the compass pointer needs to rotate by 360 - heading value (to point North).
+                // And sometimes, we need to correct for screen orientation (window.orientation).
+
+                // The standard approach is:
+                // Heading = 360 - (alpha + screenOrientation) % 360
+                magneticHeading = 360 - alpha - screenOrientation;
+
+                // Normalize the heading to be between 0 and 360
+                magneticHeading = (magneticHeading + 360) % 360;
+            }
+
+            if (magneticHeading !== null) {
+                // Update the visual pointer rotation (we rotate the pointer 360 - heading so the pointer tip points North)
+                const pointerRotation = 360 - magneticHeading;
+                document.getElementById('compass-pointer').style.transform = `rotate(${pointerRotation}deg)`;
+
+                // Update the text display
+                document.getElementById('heading-value').textContent = Math.round(magneticHeading);
+                document.getElementById('cardinal-direction').textContent = degToCard(magneticHeading);
+            }
+        }
+
+        // Function to request permissions and start compass updates
+        async function enableCompass() {
+            const enableButton = document.getElementById('enable-button');
+            const statusMessage = document.getElementById('status-message');
+            
+            enableButton.disabled = true;
+
+            try {
+                // Check if DeviceOrientationEvent is supported
+                if (window.DeviceOrientationEvent) {
+                    // Check for the modern permission API (required on iOS 13+)
+                    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                        const permissionState = await DeviceOrientationEvent.requestPermission();
                         if (permissionState === 'granted') {
-                            isCompassPermissionRequested = true;
-                            // Optional message after permission success
-                            // showMessage("Compass Enabled", "Heading data is now accessible. The arrow should point correctly.");
-                            btn.classList.add('hidden');
+                            window.addEventListener('deviceorientation', handleOrientation);
+                            enableButton.classList.add('hidden');
+                            statusMessage.textContent = 'Compass Active.';
+                            statusMessage.classList.remove('text-red-400', 'hidden');
+                            statusMessage.classList.add('text-green-400');
                         } else {
-                            // If denied, show the button as a fallback/retry option
-                            isCompassPermissionRequested = false;
-                            btn.classList.remove('hidden'); 
-                            showMessage("Compass Access Needed", "Heading data was denied. Click 'Enable Compass' to try again.");
+                            statusMessage.textContent = 'Permission denied.';
+                            statusMessage.classList.remove('hidden');
+                            enableButton.disabled = false;
                         }
-                    })
-                    .catch(error => {
-                        console.error('Error requesting device orientation permission:', error);
-                        isCompassPermissionRequested = false;
-                        btn.classList.remove('hidden'); // Show button on error
-                    });
-            } else {
-                // Non-iOS or older browsers: assume permission is implicit or not required
-                isCompassPermissionRequested = true;
-                btn.classList.add('hidden');
-            }
-        };
-
-        // --- ROUTING & NAVIGATION FUNCTIONS (Unchanged) ---
-
-        /**
-         * Fetches a detailed walking route with steps from OSRM.
-         */
-        const fetchWalkingRoute = async (startLat, startLon, endLat, endLon) => {
-            // OSRM expects coordinates in [lon, lat] format
-            const coordinates = `${startLon},${startLat};${endLon},${endLat}`;
-            // Request polyline geometry AND steps
-            const url = `${OSRM_API_URL}${coordinates}?geometries=polyline&steps=true&overview=full`;
-
-            try {
-                const data = await fetchWithRetry(url);
-                if (data.routes && data.routes.length > 0) {
-                    const route = data.routes[0];
-                    const leg = route.legs[0];
-                    
-                    const polylineString = route.geometry;
-                    const decodedPath = polyline.decode(polylineString); 
-                    
-                    return {
-                        path: decodedPath,
-                        distance: route.distance,
-                        duration: route.duration,
-                        steps: leg.steps // The turn-by-turn instructions
-                    };
+                    } else {
+                        // Standard Device Orientation API (older Android/iOS or non-Safari)
+                        window.addEventListener('deviceorientation', handleOrientation);
+                        enableButton.classList.add('hidden');
+                        statusMessage.textContent = 'Compass Active.';
+                        statusMessage.classList.remove('text-red-400', 'hidden');
+                        statusMessage.classList.add('text-green-400');
+                    }
                 } else {
-                    throw new Error("No route found by OSRM.");
+                    statusMessage.textContent = 'Device Orientation not supported on this device.';
+                    statusMessage.classList.remove('hidden');
                 }
             } catch (error) {
-                console.error("OSRM Routing Error:", error);
-                showMessage("Routing Failed", "Could not calculate a walking route. Showing straight line instead.");
-                return null;
+                console.error("Error enabling compass:", error);
+                statusMessage.textContent = 'Error: Compass features failed to start.';
+                statusMessage.classList.remove('hidden');
+                enableButton.disabled = false;
             }
         }
 
-        /**
-         * Finds the next maneuver instruction the user needs to follow.
-         */
-        const findNextManeuver = (userLat, userLon, targetSteps) => {
-            if (!targetSteps || targetSteps.length === 0) {
-                return { instruction: "Continue to your destination.", distance: 0, finished: true };
-            }
+        // Attach the enable function to the button click
+        document.getElementById('enable-button').addEventListener('click', enableCompass);
 
-            let bestStep = targetSteps[targetSteps.length - 1]; // Default to the last step (arrival)
-            let minDistance = Infinity;
-            let maneuverIndex = -1;
-
-            // Iterate through steps, looking for the *closest* maneuver point that hasn't been passed
-            // The OSRM steps contain the maneuver location in the 'location' array (lon, lat)
-            for (let i = 0; i < targetSteps.length; i++) {
-                const step = targetSteps[i];
-                // Step location is [lon, lat]
-                const stepLon = step.maneuver.location[0]; 
-                const stepLat = step.maneuver.location[1];
-                
-                const distanceToStep = getDistance(userLat, userLon, stepLat, stepLon);
-
-                // If the user is close enough (e.g., within 20m) and we haven't checked this one, 
-                // we treat the next one as the current target.
-                if (distanceToStep > 20) {
-                     // Since we iterate sequentially, the first step we find that is > 20m away 
-                     // from the maneuver point is the 'next' one to aim for.
-                     if (distanceToStep < minDistance) {
-                        minDistance = distanceToStep;
-                        bestStep = step;
-                        maneuverIndex = i;
-                        break; // Found the target maneuver
-                     }
-                }
-            }
-            
-            // Handle arrival (last step)
-            if (maneuverIndex === -1 || maneuverIndex === targetSteps.length - 1) {
-                 return { instruction: "Arriving at your destination!", distance: getDistance(userLat, userLon, tourRoute[currentTourStep].lat, tourRoute[currentTourStep].lon), finished: true, index: targetSteps.length - 1 };
-            }
-
-            // Return the instruction and the distance to the maneuver location
-            return { 
-                instruction: bestStep.maneuver.instruction, 
-                distance: minDistance, 
-                finished: false,
-                index: maneuverIndex
-            };
-        };
-
-
-        // --- MAP & GEO LOCATION LOGIC (Updated startWatchingPosition) ---
-
-        const initMap = () => {
-             // CRITICAL FIX: Wrap initialization in try/catch and call invalidateSize()
-            try {
-                map = L.map('map', { zoomControl: false }).setView([38.8893, -77.0502], 13);
-                
-                L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
-                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-                    subdomains: 'abcd',
-                    maxZoom: 20
-                }).addTo(map);
-
-                // This is a common fix for Leaflet maps inside flex containers that fail to render tiles
-                setTimeout(() => {
-                    map.invalidateSize();
-                }, 100); 
-
-                landmarkMarkers.addTo(map);
-                L.control.zoom({ position: 'bottomright' }).addTo(map);
-                map.on('moveend', fetchAndPinLandmarks);
-
-                startWatchingPosition();
-                fetchAndPinLandmarks();
-
-            } catch (e) {
-                console.error("Map Initialization Failed:", e);
-                showMessage("Map Error", `Failed to initialize the map. Error: ${e.message}`);
-            }
-        };
-
-        const changeLocation = (lat, lng, name) => {
-             map.setView([lat, lng], 13);
-             showMessage("Location Changed", `Map centered on ${name}. Loading local historic places...`);
-        };
-        
-        /**
-         * Initializes geolocation: checks for compass permission needs, gets initial fix, then starts continuous watch.
-         */
-        const startWatchingPosition = () => {
-            if (watchingPosition) return;
-            
-            const locationStatus = document.getElementById('locationStatus');
-            const locationStatusText = document.getElementById('locationStatusText');
-            
-            // 1. Check for Compass Permission Requirement (iOS) and request immediately
-            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                // Call the permission handler immediately on load
-                handleCompassPermissionRequest(); 
-            } else {
-                 // For other browsers, assume implicit permission is available
-                 isCompassPermissionRequested = true;
-                 document.getElementById('enableCompassBtn').classList.add('hidden');
-            }
-
-
-            if ('geolocation' in navigator) {
-                // Show status bubble immediately
-                locationStatus.classList.add('opacity-100', 'pointer-events-auto');
-                locationStatusText.textContent = "Requesting initial GPS location...";
-                
-                // 2. Get quick initial fix (faster startup)
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        // Use the success handler logic from watchPositionSuccess to initialize the marker and center the map right away.
-                        watchPositionSuccess(position); 
-                        locationStatusText.textContent = "Initial location acquired. Starting continuous tracking...";
-                        
-                        // 3. Start continuous watch AFTER initial fix
-                        watchingPosition = true;
-                        // Use high accuracy and low timeout for better real-time heading/position
-                        watchId = navigator.geolocation.watchPosition(
-                            watchPositionSuccess, 
-                            watchPositionError, 
-                            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-                        );
-                    },
-                    (error) => {
-                        // If initial fix fails (e.g., permission denied, timeout), display error
-                        watchPositionError(error); 
-                        
-                        // 4. Still start continuous watch, in case the error was temporary or a timeout
-                        watchingPosition = true;
-                        watchId = navigator.geolocation.watchPosition(
-                            watchPositionSuccess, 
-                            watchPositionError, 
-                            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-                        );
-                    },
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-                );
-
-            } else {
-                showMessage("Geolocation Not Supported", "Your browser does not support Geolocation, cannot track position.");
-                locationStatusText.textContent = "Geolocation unsupported.";
-            }
-        };
-
-
-        const watchPositionSuccess = (position) => {
-            const { latitude, longitude, heading } = position.coords;
-            const newLatLong = [latitude, longitude];
-
-            // Initialize or move user marker
-            if (!userMarker) {
-                userMarker = L.marker(newLatLong, { icon: userArrowIcon }).addTo(map).bindPopup("Your Location");
-                // Crucial step: Center map on user location immediately on first fix
-                map.setView(newLatLong, map.getZoom() > 14 ? map.getZoom() : 15);
-            } else {
-                userMarker.setLatLng(newLatLong);
-                // In navigation mode, pan the map to keep the user centered
-                if (currentTourStep > 0 && currentTourStep < tourRoute.length) {
-                    map.panTo(newLatLong, {animate: true, duration: 1.0});
-                }
-            }
-
-            // --- HEADING LOGIC ---
-            const arrow = document.getElementById('userDirectionArrow');
-            let headingText = "N/A";
-
-            // Check if heading is a valid number AND we have permission (or don't need explicit permission)
-            // The heading comes from the GPS API, which is usually direction of travel (Course Over Ground),
-            // which is more reliable for navigation than static compass when moving.
-            if (arrow && isCompassPermissionRequested) {
-                if (heading !== null && !isNaN(heading)) {
-                     // GeoLocation API heading is in degrees relative to true North (0-360)
-                    // We rotate the arrow. CSS rotation starts at 0 degrees (Up/North)
-                    arrow.style.transform = `rotate(${heading}deg)`;
-                    headingText = `${heading.toFixed(1)}°`;
-                }
-            }
-            
-            // Update Status Bubble - Include Heading
-            document.getElementById('locationStatusText').innerHTML = `
-                Lat: ${latitude.toFixed(4)}, 
-                Lng: ${longitude.toFixed(4)} 
-                <span class="text-indigo-400 ml-2">(Hdg: ${headingText})</span>
-            `;
-            // --- END HEADING LOGIC ---
-
-
-            // Handle tour progression and instruction updates
-            checkTourProgress(newLatLong);
-        };
-
-        const watchPositionError = (error) => {
-            console.error('Geolocation error:', error);
-            
-            let message = "Geolocation Error. Check permissions.";
-            if (error.code === error.PERMISSION_DENIED) {
-                 message = "Permission denied. Location marker may not appear.";
-            }
-
-            document.getElementById('locationStatusText').textContent = message;
-            showMessage("GPS Error", `Error Code ${error.code}: ${error.message}`);
-        };
-
-
-        // --- TOUR CONFIGURATION & INITIAL ROUTE DRAWING ---
-
-        const openTourPanel = () => {
-            document.getElementById('tourPanel').classList.toggle('hidden');
+        // Initial setup for status message visibility if no permission is needed
+        if (typeof DeviceOrientationEvent.requestPermission !== 'function') {
+            document.getElementById('status-message').textContent = 'Click to start compass.';
+            document.getElementById('status-message').classList.remove('hidden');
+            document.getElementById('enable-button').disabled = false;
+        } else {
+            document.getElementById('status-message').textContent = 'Click "Enable" to request sensor access.';
+            document.getElementById('status-message').classList.remove('hidden');
         }
 
-        const fetchWikipediaLandmarks = async (lat, lon, keyword) => {
-            if (isFetching) return;
-            isFetching = true;
-            landmarkMarkers.clearLayers();
-            tourPoints = []; 
-
-            // Use the fixed radius (5km) for the API call
-            const radiusMeters = FIXED_SEARCH_RADIUS_KM * 1000; 
-
-            let url = `${WIKIPEDIA_API_URL}?action=query&list=geosearch&gsradius=${radiusMeters}&gscoord=${lat}|${lon}&gslimit=50&format=json&origin=*`;
-            
-            try {
-                const data = await fetchWithRetry(url);
-                const pages = data.query?.geosearch || [];
-                
-                // Optional keyword filtering (applied client-side)
-                const filteredPages = keyword 
-                    ? pages.filter(p => p.title.toLowerCase().includes(keyword.toLowerCase()))
-                    : pages;
-
-                filteredPages.forEach(p => {
-                    pinLandmark(p.lat, p.lon, p.title, `https://en.wikipedia.org/?curid=${p.pageid}`);
-                });
-                
-                isFetching = false;
-                document.getElementById('tourStatus').textContent = `Found ${filteredPages.length} landmarks.`;
-
-            } catch (error) {
-                console.error("Wikipedia GeoSearch Error:", error);
-                showMessage("Data Error", "Could not fetch landmark data from Wikipedia.");
-                isFetching = false;
-            }
-        };
-
-        const pinLandmark = (lat, lon, title, url) => {
-            const marker = L.marker([lat, lon], { icon: landmarkIcon }).addTo(landmarkMarkers);
-            const popupContent = `
-                <div class="font-bold text-indigo-700">${title}</div>
-                <div class="text-sm mt-1">
-                    <a href="${url}" target="_blank" class="text-indigo-500 hover:text-indigo-700 underline">Read on Wikipedia</a>
-                </div>
-            `;
-            marker.bindPopup(popupContent);
-            tourPoints.push({lat, lon, title, isWiki: true, url, marker});
-        };
-
-        const fetchAndPinLandmarks = () => {
-            const center = map.getCenter();
-            // Pass the fixed radius implicitly
-            const keyword = document.getElementById('categoryFilter').value.trim();
-            fetchWikipediaLandmarks(center.lat, center.lng, keyword);
-        };
-
-
-        const createTour = (reset=false) => {
-            const maxDistanceMiles = parseFloat(document.getElementById('tourDistance').value);
-            const maxDistanceMeters = maxDistanceMiles * 1609.34;
-            
-            if (tourPoints.length < 2) {
-                document.getElementById('tourStatus').textContent = 'Error: Not enough landmarks loaded.';
-                showMessage("Tour Failed: No Pins", `Only ${tourPoints.length} landmarks found on the map. Please ensure the map is centered over a major city.`);
-                return;
-            }
-
-            const refLatLong = userMarker ? userMarker.getLatLng() : map.getCenter();
-            
-            const startPoint = {
-                lat: refLatLong.lat,
-                lon: refLatLong.lng, 
-                title: userMarker ? "Your Start Location" : "Map Center Start",
-                isWiki: false,
-                url: null
-            };
-
-            let potentialStops = tourPoints.filter(p => {
-                const distance = getDistance(startPoint.lat, startPoint.lon, p.lat, p.lon);
-                return distance <= maxDistanceMeters; 
-            }).map(p => ({
-                ...p,
-                distance: getDistance(startPoint.lat, startPoint.lon, p.lat, p.lon)
-            }));
-
-            if (potentialStops.length < 2) {
-                document.getElementById('tourStatus').textContent = `Error: Only ${potentialStops.length} pins available locally.`;
-                showMessage("Tour Failed: Pins Too Far", `Only ${potentialStops.length} landmarks found within ${maxDistanceMiles} miles of the starting point. Try increasing the Max Tour Distance in this panel.`);
-                return;
-            }
-            
-            potentialStops.sort((a, b) => a.distance - b.distance);
-
-            tourRoute = [startPoint, ...potentialStops.slice(0, 5)]; 
-            currentTourStep = 0;
-            currentManeuverIndex = -1;
-            
-            // Draw initial Straight Line Path (Pre-Navigation)
-            if (tourPath) map.removeLayer(tourPath);
-            const straightLineCoords = tourRoute.map(p => L.latLng(p.lat, p.lon));
-            tourPath = L.polyline(straightLineCoords, {
-                color: '#84cc16', 
-                weight: 3, 
-                opacity: 0.5,
-                dashArray: '10, 10' 
-            }).addTo(map);
-
-            document.getElementById('navigationPanel').classList.remove('translate-y-full', 'opacity-0');
-            document.getElementById('tourPanel').classList.add('hidden');
-            
-            updateNavigationPanel();
-            map.fitBounds(tourPath.getBounds(), {padding: [50, 50]});
-        }
-
-
-        /**
-         * Fetches the detailed walking route to the current destination and updates the map.
-         */
-        const initiateRoute = async () => {
-            if (currentTourStep <= 0 || currentTourStep >= tourRoute.length) return;
-
-            const endPoint = tourRoute[currentTourStep]; // Target
-            
-            const userLatLong = userMarker ? userMarker.getLatLng() : map.getCenter();
-            
-            // Use current user location as the actual start of the segment
-            const currentStart = {lat: userLatLong.lat, lon: userLatLong.lng}; 
-
-            document.getElementById('navActionButton').textContent = "Calculating Route...";
-            document.getElementById('navActionButton').disabled = true;
-
-            const routeData = await fetchWalkingRoute(currentStart.lat, currentStart.lon, endPoint.lat, endPoint.lon);
-
-            // Clear old path
-            if (tourPath) map.removeLayer(tourPath);
-
-            if (routeData) {
-                // Store the steps in the target object
-                tourRoute[currentTourStep].steps = routeData.steps;
-                currentManeuverIndex = 0; // Reset maneuver tracking
-                
-                // Draw the detailed OSRM route
-                tourPath = L.polyline(routeData.path, {
-                    color: '#16a34a', 
-                    weight: 6, 
-                    opacity: 0.9,
-                    lineJoin: 'round'
-                }).addTo(map);
-                
-                // Estimate time and distance
-                const distanceKm = (routeData.distance / 1000).toFixed(2);
-                const durationMinutes = Math.ceil(routeData.duration / 60);
-
-                // Update the instruction with overall segment data
-                let nextText = `Walk ${distanceKm} km (approx. ${durationMinutes} min). <br>`;
-                if (endPoint.isWiki) {
-                    nextText += `Destination: <span class="font-bold">${endPoint.title}</span>. <a href="${endPoint.url}" target="_blank" class="text-white underline hover:text-green-200">(Wiki Info)</a>`;
-                } else {
-                    nextText += `Destination: <span class="font-bold">${endPoint.title}</span>.`;
-                }
-                
-                document.getElementById('nextLandmarkInfo').innerHTML = nextText;
-
-                // Set high zoom level for GPS mode
-                map.setView(userLatLong, 18, {animate: true, duration: 1.5});
-            } else {
-                // Fallback: draw a simple line
-                const simplePath = [
-                    L.latLng(currentStart.lat, currentStart.lon),
-                    L.latLng(endPoint.lat, endPoint.lon)
-                ];
-                tourPath = L.polyline(simplePath, {
-                    color: '#f87171', 
-                    weight: 4, 
-                    opacity: 0.7
-                }).addTo(map);
-
-                document.getElementById('nextLandmarkInfo').innerHTML = `
-                    Routing failed, follow the straight line to: 
-                    <span class="font-bold">${endPoint.title}</span>.
-                `;
-                 map.setView(userLatLong, 18, {animate: true, duration: 1.5});
-            }
-
-            document.getElementById('navActionButton').textContent = "Next Stop";
-            document.getElementById('navActionButton').disabled = true; 
-        }
-
-        const updateNavigationPanel = () => {
-            if (!tourRoute || tourRoute.length <= 1) return;
-            
-            const totalStops = tourRoute.length - 1; 
-            document.getElementById('navStepCounter').textContent = `${currentTourStep}/${totalStops}`;
-
-            if (currentTourStep === 0) {
-                // Pre-Navigation State
-                const nextStop = tourRoute[1];
-                document.getElementById('currentNavInstruction').textContent = "Tour Ready: Conceptual Route";
-                document.getElementById('nextLandmarkInfo').innerHTML = `The dashed line shows the approximate path. Press <span class="font-bold">'Start Navigation'</span> to get the walking route to: <span class="font-bold">${nextStop.title}</span>.`;
-                document.getElementById('navActionButton').textContent = "Start Navigation";
-                document.getElementById('navActionButton').disabled = false; 
-                
-            } else if (currentTourStep < tourRoute.length) {
-                // Mid-tour steps - Trigger detailed route fetch
-                const target = tourRoute[currentTourStep];
-                document.getElementById('currentNavInstruction').textContent = `Navigating to Stop ${currentTourStep}/${totalStops}: ${target.title}`;
-                
-                // Only initiate route if steps haven't been loaded yet for this segment
-                if (!target.steps) {
-                    initiateRoute();
-                }
-                
-            } else {
-                // Tour finished
-                document.getElementById('currentNavInstruction').textContent = "Tour Completed!";
-                document.getElementById('nextLandmarkInfo').textContent = "You've visited all designated historic points!";
-                document.getElementById('navActionButton').textContent = "End Tour";
-                document.getElementById('navActionButton').disabled = false;
-            }
-        }
-        
-        const nextSegment = () => {
-             if (currentTourStep < tourRoute.length - 1) {
-                // Advance to the next landmark
-                currentTourStep++;
-                // Reset maneuver index for the new segment
-                currentManeuverIndex = 0; 
-                updateNavigationPanel();
-            } else if (currentTourStep === 0) {
-                 // Initial click on "Start Navigation"
-                 currentTourStep = 1;
-                 updateNavigationPanel(); // This triggers initiateRoute()
-            }
-             else if (currentTourStep === tourRoute.length - 1) {
-                // End Tour logic
-                if (tourPath) map.removeLayer(tourPath);
-                tourRoute = null;
-                currentTourStep = 0;
-                currentManeuverIndex = -1;
-                document.getElementById('navigationPanel').classList.add('translate-y-full', 'opacity-0');
-                showMessage("Tour Ended", "Thank you for exploring! Start a new tour anytime.");
-            }
-        }
-
-        const checkTourProgress = (userLatLong) => {
-            // Only perform GPS checks if we are actively navigating to a landmark
-            if (!tourRoute || currentTourStep < 1 || currentTourStep >= tourRoute.length || !tourRoute[currentTourStep].steps) {
-                 if (currentTourStep > 0 && userMarker) {
-                    // Pan map to keep user in center during navigation
-                    map.panTo(userMarker.getLatLng(), {animate: true, duration: 1.0});
-                 }
-                 return;
-            }
-
-            const target = tourRoute[currentTourStep];
-            const userLat = userLatLong[0];
-            const userLon = userLatLong[1];
-            
-            const distanceToDestination = getDistance(userLat, userLon, target.lat, target.lon);
-            const arrivalThreshold = 50; // 50 meters
-
-            // --- 1. Check for Destination Arrival ---
-            if (distanceToDestination < arrivalThreshold) {
-                document.getElementById('navActionButton').disabled = false;
-                document.getElementById('currentNavInstruction').innerHTML = `<span class="text-yellow-200 font-bold">ARRIVED:</span> ${target.title}`;
-                document.getElementById('nextLandmarkInfo').textContent = `You have reached this location. Press 'Next Stop' to continue the tour.`;
-                return;
-            }
-            
-            // --- 2. Get Next Maneuver Instruction ---
-            const maneuverResult = findNextManeuver(userLat, userLon, target.steps);
-            
-            // Update the Panel with GPS Instructions
-            if (!maneuverResult.finished) {
-                const distanceMeters = maneuverResult.distance.toFixed(0);
-                
-                document.getElementById('currentNavInstruction').innerHTML = `
-                    <span class="font-bold">${maneuverResult.instruction}</span>
-                `;
-                
-                document.getElementById('nextLandmarkInfo').innerHTML = `
-                    Distance to turn: <span class="font-bold">${distanceMeters} meters</span>.
-                    <br>
-                    Heading to <span class="font-bold">${target.title}</span>.
-                `;
-
-                // If the user has progressed past the last known maneuver, update the index.
-                if (maneuverResult.index > currentManeuverIndex) {
-                    currentManeuverIndex = maneuverResult.index;
-                }
-            } else {
-                // Final stretch before arrival
-                const distanceMeters = distanceToDestination.toFixed(0);
-                document.getElementById('currentNavInstruction').innerHTML = `Final Stretch: Proceed to ${target.title}`;
-                document.getElementById('nextLandmarkInfo').textContent = `Distance remaining: ${distanceMeters} meters.`;
-            }
-
-            // --- 3. Keep User Centered and Zoomed ---
-            map.panTo(userMarker.getLatLng(), {animate: true, duration: 1.0});
-            if (map.getZoom() < 18) map.setZoom(18);
-        }
-
-        document.addEventListener('DOMContentLoaded', initMap);
     </script>
 </body>
 </html>
