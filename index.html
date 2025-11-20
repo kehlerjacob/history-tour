@@ -163,8 +163,9 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+        // Global variables provided by the environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? firebaseConfig : '{}');
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let app, db, auth;
@@ -174,8 +175,7 @@
         // ORS_API_KEY is configured for the tour feature.
         const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6Ijg1ZWRmZjY2Y2VkZTRkOWVhMmI4NDliNTMxOThhYTY0IiwiaCI6Im11cm11cjY0In0="; 
         
-        // *** FIX: REMOVING PROFILE FROM URL TO FORCE ORS TO READ IT FROM THE BODY ***
-        // Change from /directions/walking/geojson to /directions/geojson
+        // ORS URL uses the generic endpoint, and the profile is passed in the body.
         const ORS_URL = "https://api.openrouteservice.org/v2/directions/geojson";
 
 
@@ -555,24 +555,22 @@ out center;
             // 1. Get the list of all historic sites
             const allLandmarks = Object.values(landmarksStore);
             if (allLandmarks.length === 0) {
-                 updateStatus("No landmarks found in the current search area. Zoom out or increase radius.", true, false, 'tourStatus');
+                 updateStatus("No landmarks found. Please ensure the map has points before starting a tour.", true, false, 'tourStatus');
                  return;
             }
 
-            // 2. Sort by distance and try to select landmarks that roughly match the path length.
-            const targetMaxLandmarkDistance = desiredDistanceMiles / 3.5;
+            // 2. Select landmarks: Sort by distance and try to select landmarks that roughly match the path length.
+            // Ensure we have at least 2 points (3 total coordinates including start) for a loop.
             
-            const candidateLandmarks = allLandmarks
-                .filter(lm => lm.distanceMiles <= targetMaxLandmarkDistance)
-                .sort((a, b) => a.distanceMiles - b.distanceMiles);
+            // Sort all landmarks by distance from user
+            const sortedLandmarks = allLandmarks.sort((a, b) => a.distanceMiles - b.distanceMiles);
 
-            // If we have fewer than 2 candidates, use the closest 5 landmarks to ensure a viable loop.
-            const pointsToUse = candidateLandmarks.length < 2 ? 
-                allLandmarks.sort((a, b) => a.distanceMiles - b.distanceMiles).slice(0, Math.min(allLandmarks.length, 5)) : 
-                candidateLandmarks;
+            // Target a maximum of 10 points for routing complexity, using the closest ones.
+            const maxPoints = 10;
+            const pointsToUse = sortedLandmarks.slice(0, Math.min(sortedLandmarks.length, maxPoints));
 
-            if (pointsToUse.length === 0) {
-                 updateStatus(`Could not find landmarks close enough for a ${desiredDistanceMiles} mile loop. Try a smaller distance or increase search radius.`, true, false, 'tourStatus');
+            if (pointsToUse.length < 2) {
+                 updateStatus("Need at least 2 landmarks in the search radius for a viable tour.", true, false, 'tourStatus');
                  return;
             }
 
@@ -585,20 +583,21 @@ out center;
 
             // 4. Construct the ORS payload 
             const orsPayload = {
-                // *** FIX: Explicitly adding profile to the body because the server fails to read it from the URL path. ***
-                profile: "walking",
+                // *** FIX APPLIED: Using the correct profile name: foot-walking ***
+                profile: "foot-walking", 
                 coordinates: coords,
                 options: {
                     round_trip: { 
                         points: pointsToUse.length + 1, // Number of stops (user + landmarks)
-                        length: desiredDistanceMiles * 1000 * MILES_TO_KM // Target distance in meters
+                        // Target distance in meters (desiredDistanceMiles * miles_to_km * 1000)
+                        length: desiredDistanceMiles * 1000 * MILES_TO_KM 
                     }
                 }
             };
 
             // *** DEBUGGING LOGS ***
             console.log("ORS Request URL (New structure):", ORS_URL);
-            console.log("ORS Payload (Stringified - New profile in body):", JSON.stringify(orsPayload));
+            console.log("ORS Payload (Stringified - Fixed profile):", JSON.stringify(orsPayload));
 
 
             // 5. ORS API Request (Round Trip)
@@ -632,13 +631,15 @@ out center;
                         }
 
                         // For other non-OK statuses (400, 403, 500, etc.)
-                        let errorText = await response.text();
-                        try {
-                            const errorJson = JSON.parse(errorText);
-                            const errorMessage = errorJson.error?.message || `ORS API failed with status ${response.status}`;
-                            throw new Error(errorMessage);
-                        } catch (e) {
-                            throw new Error(`ORS API failed (${response.status}): ${errorText.substring(0, 100)}...`);
+                        if (!response.ok) {
+                            let errorText = await response.text();
+                            try {
+                                const errorJson = JSON.parse(errorText);
+                                const errorMessage = errorJson.error?.message || `ORS API failed with status ${response.status}`;
+                                throw new Error(errorMessage);
+                            } catch (e) {
+                                throw new Error(`ORS API failed (${response.status}): ${errorText.substring(0, 100)}...`);
+                            }
                         }
                     } catch (error) {
                         if (attempt === maxRetries) throw error; // Re-throw only on final failure
@@ -649,7 +650,6 @@ out center;
                 }
                 
                 if (!response || !response.ok) {
-                    // This line should only be reached if a final error was thrown inside the loop
                     throw new Error("Failed to get a successful response from ORS API after retries."); 
                 }
 
