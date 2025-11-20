@@ -239,8 +239,8 @@
 
     <!-- Location Status Bubble (REPOSITIONED & Compacted) -->
     <div id="locationStatus"
-        class="fixed top-[9rem] sm:top-[6rem] left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-xl z-[3500] flex items-center justify-center gap-3 transition-opacity duration-500 opacity-0 pointer-events-none w-11/12 max-w-3xl border border-gray-200">
-        <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse flex-shrink-0"></div>
+        class="fixed top-[9rem] sm:top-[6rem] left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-xl z-[3500] flex items-center justify-center transition-opacity duration-500 opacity-0 pointer-events-none w-11/12 max-w-3xl border border-gray-200 relative">
+        <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse flex-shrink-0 absolute left-4"></div>
         <span class="text-sm font-medium text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis"
             id="locationStatusText">Locating...</span>
     </div>
@@ -419,7 +419,7 @@
                 arrow.style.transform = `rotate(${pointerRotation}deg)`;
 
                 // --- MODIFICATION: Simplified status text to only show heading ---
-                const headingText = `${cardinal} (${magneticHeading.toFixed(1)}°) (Compass)`;
+                const headingText = `${cardinal} (${magneticHeading.toFixed(1)}°)`;
 
                 if (locationStatusText) {
                     // Update the status text with the current heading only
@@ -697,8 +697,8 @@
             const cardinalDirection = getCardinalDirection(displayHeading);
 
             const headingText = displayHeading !== null
-                ? `${cardinalDirection} (${displayHeading.toFixed(1)}°) (${headingSource})`
-                : `N/A (${cardinalDirection}) (No sensor data)`;
+                ? `${cardinalDirection} (${displayHeading.toFixed(1)}°)`
+                : `N/A (${cardinalDirection})`;
 
             // Update Status Bubble - ONLY HEADING
             document.getElementById('locationStatusText').innerHTML = `
