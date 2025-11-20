@@ -139,27 +139,22 @@
             </div>
         </div>
 
-        <!-- Filter and Fixed Radius Display Row 2 (Full Width) -->
-        <div class="flex flex-col sm:flex-row items-center gap-3 w-full max-w-4xl mx-auto">
+        <!-- Filter Row 2 (Full Width) -->
+        <div class="flex items-center gap-3 w-full max-w-4xl mx-auto">
             
              <!-- Category Filter Input -->
-            <div class="flex-grow bg-indigo-700 rounded-lg p-2 flex items-center gap-2 w-full sm:w-auto">
+            <div class="flex-grow bg-indigo-700 rounded-lg p-2 flex items-center gap-2 w-full">
                 <label for="categoryFilter" class="text-white text-xs font-medium whitespace-nowrap hidden sm:block">Filter by Keyword:</label>
-                <input type="text" id="categoryFilter" placeholder="e.g., house, museum, park" 
+                <input type="text" id="categoryFilter" placeholder="e.g., house, museum, park (5km Search Radius)" 
                        onchange="fetchAndPinLandmarks()"
                        class="w-full p-1 bg-indigo-800 text-white placeholder-indigo-300 text-xs rounded-md focus:ring-indigo-300 focus:border-indigo-300">
-            </div>
-
-            <!-- Fixed Radius Display -->
-            <div class="bg-indigo-700 rounded-lg p-2 flex items-center justify-center w-full sm:w-auto px-4">
-                <span class="text-white text-xs font-medium whitespace-nowrap">Search Radius: <span class="font-bold">5km</span></span>
             </div>
         </div>
     </header>
 
 
     <!-- Tour Panel (Hidden by default) -->
-    <div id="tourPanel" class="hidden absolute top-[12rem] right-4 bg-white p-4 rounded-xl shadow-2xl z-[4900] w-72">
+    <div id="tourPanel" class="hidden absolute top-[13rem] right-4 bg-white p-4 rounded-xl shadow-2xl z-[4900] w-72">
         <h3 class="font-bold text-lg text-indigo-700 mb-3 flex justify-between items-center">
             Configure Tour
             <button onclick="document.getElementById('tourPanel').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">
@@ -180,7 +175,7 @@
     <div id="map" class="flex-1 w-full bg-gray-200"></div>
 
     <!-- Location Status Bubble (REPOSITIONED & Compacted) -->
-    <div id="locationStatus" class="fixed top-[6rem] left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-xl z-[3500] flex items-center justify-center gap-3 transition-opacity duration-500 opacity-0 pointer-events-none w-11/12 max-w-3xl border border-gray-200">
+    <div id="locationStatus" class="fixed top-[9rem] sm:top-[6rem] left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-xl z-[3500] flex items-center justify-center gap-3 transition-opacity duration-500 opacity-0 pointer-events-none w-11/12 max-w-3xl border border-gray-200">
         <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse flex-shrink-0"></div>
         <span class="text-xs font-medium text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis" id="locationStatusText">Locating...</span>
     </div>
@@ -229,7 +224,7 @@
         let watchId = null;
         let currentManeuverIndex = -1; // Index of the next maneuver in the OSRM steps array
 
-        // CONSTANT: Fixed search radius in kilometers
+        // CONSTANT: Fixed search radius in kilometers (5 miles is approx 8.04672 km, sticking to 5km for precision)
         const FIXED_SEARCH_RADIUS_KM = 5;
 
         // Custom Marker Icon for User Location (Simple Arrow)
