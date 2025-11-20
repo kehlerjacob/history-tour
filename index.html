@@ -52,7 +52,7 @@
     <header class="bg-indigo-600 shadow-xl z-50 p-4 flex flex-col md:flex-row items-center justify-between gap-4 flex-none">
         <div>
             <h1 class="text-2xl font-bold text-white">Historic Places Explorer</h1>
-            <p class="text-indigo-200 text-sm">Searching Open Historic Data</p>
+            <p class="text-indigo-200 text-sm">Official National Register Data (NPS)</p>
         </div>
 
         <!-- Radius Control -->
@@ -139,7 +139,6 @@
         let currentRadiusMiles = 1;
         let markersLayerGroup = null;
         let userLocationMarker = null;
-        let searchTimeout = null;
 
         // --- FIREBASE SETUP ---
         function initializeFirebase() {
@@ -167,12 +166,11 @@
         }
 
         function getLandmarkDocPath(landmarkId) {
-            // Sanitize ID for Firestore path
             const safeId = landmarkId.toString().replace(/[^a-zA-Z0-9]/g, '_');
             return `artifacts/${appId}/public/data/landmarks/${safeId}`;
         }
 
-        // --- GEOLOCATION & OVERPASS API ---
+        // --- GEOLOCATION & NPS API ---
 
         function updateStatus(msg, isError = false) {
             const el = document.getElementById('locationStatus');
@@ -190,7 +188,6 @@
                 dot.classList.add('bg-green-500', 'animate-pulse');
             }
 
-            // Auto hide after 3s
             setTimeout(() => { el.classList.add('opacity-0'); }, 3000);
         }
 
@@ -208,7 +205,6 @@
                     
                     updateStatus("Location found!");
                     
-                    // Move map
                     if (map) {
                         map.setView([currentLat, currentLng], 14);
                         addUserMarker();
@@ -218,7 +214,6 @@
                 (error) => {
                     console.error("Location error:", error);
                     updateStatus("Location access denied. Using default.", true);
-                    // Load default area landmarks anyway
                     if (map) fetchNearbyLandmarks(); 
                 },
                 { enableHighAccuracy: true }
@@ -240,84 +235,104 @@
                 .bindPopup("You are here");
         }
 
+        // Calculate bounding box for NPS query
+        function getBoundingBox(lat, lng, radiusMiles) {
+            // Approx conversions
+            const latChange = radiusMiles / 69.0;
+            const lngChange = radiusMiles / (69.0 * Math.cos(lat * Math.PI / 180));
+            
+            return {
+                xmin: lng - lngChange,
+                ymin: lat - latChange,
+                xmax: lng + lngChange,
+                ymax: lat + latChange
+            };
+        }
+
         async function fetchNearbyLandmarks() {
             if (!map) return;
             
-            const radiusMeters = currentRadiusMiles * 1609.34;
             updateStatus(`Searching within ${currentRadiusMiles} mile(s)...`);
 
-            // Overpass API Query: Nodes, Ways, Relations with [historic] tag and [name] tag
-            // around current location.
-            const query = `
-                [out:json][timeout:25];
-                (
-                  node["historic"]["name"](around:${radiusMeters},${currentLat},${currentLng});
-                  way["historic"]["name"](around:${radiusMeters},${currentLat},${currentLng});
-                  relation["historic"]["name"](around:${radiusMeters},${currentLat},${currentLng});
-                );
-                out center;
-            `;
+            // Calculate bounding box
+            const bbox = getBoundingBox(currentLat, currentLng, currentRadiusMiles);
+            const bboxString = `${bbox.xmin},${bbox.ymin},${bbox.xmax},${bbox.ymax}`;
 
-            const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+            // NPS ArcGIS REST API Endpoint
+            const baseUrl = "https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer/0/query";
+            
+            // Parameters for spatial query
+            const params = new URLSearchParams({
+                where: "1=1", // Select all that match geometry
+                geometry: bboxString,
+                geometryType: "esriGeometryEnvelope",
+                spatialRel: "esriSpatialRelIntersects",
+                outFields: "RESNAME,NRIS_Refnum", // Resource Name and Reference Number
+                returnGeometry: "true",
+                f: "geojson", // Request GeoJSON format
+                resultRecordCount: "50" // Limit results to prevent overcrowding
+            });
 
             try {
-                const response = await fetch(url);
-                if (!response.ok) throw new Error("Overpass API request failed");
+                const response = await fetch(`${baseUrl}?${params.toString()}`);
+                if (!response.ok) throw new Error("NPS API request failed");
                 
                 const data = await response.json();
-                displayLandmarks(data.elements);
-                updateStatus(`Found ${data.elements.length} historic places`);
+                
+                if (data.features) {
+                    displayLandmarks(data.features);
+                    updateStatus(`Found ${data.features.length} official registers`);
+                } else {
+                    // Sometimes API returns error in JSON body
+                    console.warn("NPS API returned no features or error:", data);
+                    updateStatus("No data found in this area", true);
+                }
             } catch (error) {
                 console.error("Error fetching landmarks:", error);
-                updateStatus("Error fetching data", true);
+                updateStatus("Error connecting to NPS database", true);
             }
         }
 
-        function displayLandmarks(elements) {
+        function displayLandmarks(features) {
             if (!map) return;
             
-            // Clear existing markers
             if (markersLayerGroup) {
                 markersLayerGroup.clearLayers();
             } else {
                 markersLayerGroup = window.L.layerGroup().addTo(map);
             }
 
-            if (elements.length === 0) return;
+            if (features.length === 0) return;
 
+            // Official NPS-style color or generic historic icon
             const historicIcon = window.L.divIcon({
                 className: 'bg-transparent',
-                html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8 text-red-700 drop-shadow-md"><path fill-rule="evenodd" d="M11.54 22.351l.07.074.072.069a.75.75 0 0 0 1.002 0l.07-.069.074-.075a2.784 2.784 0 0 0 .812-1.969h-.008c.594-.65.94-1.423.94-2.316l.001-2.906c0-3.328-2.34-6.002-5.166-6.444l-.24-.031a.75.75 0 0 0-.274-.012l-.2-.007-.015-.001-.013-.001c-3.238 0-5.875 2.637-5.875 5.875v2.906c0 .893.346 1.666.94 2.316h-.008c2.008 2.213 3.931 3.5 4.5 3.5.569 0 2.492-1.287 4.5-3.5h-.008Zm-.202-.676l-.041-.043-.035-.035c-.098-.097-.215-.2-.341-.318l-.053-.049c-.436-.421-.86-.788-1.246-1.071l-.104-.08c-1.127-.852-2.126-1.558-2.888-2.079l-.022-.015c-.443-.314-.84-.59-1.192-.816a3.84 3.84 0 0 1-.502-.303c-.22-.167-.428-.352-.619-.554a4.342 4.342 0 0 1-.458-.696c-.228-.415-.346-.86-.346-1.309V11.25a4.375 4.375 0 0 1 8.75 0v1.791c0 .448-.118.894-.346 1.309a4.342 4.342 0 0 1-.458.696c-.191.202-.399.387-.619.554a3.84 3.84 0 0 1-.502.303c-.352.226-.749.502-1.192.816l-.022.015c-.762.521-1.761 1.227-2.888 2.079l-.104.08c-.386.283-.81.65-1.246 1.071l-.053.049c-.126.118-.243.22-.341.318l-.035.035-.041.043-.058.056Z" clip-rule="evenodd" /></svg>`,
+                html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8 text-indigo-800 drop-shadow-md"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm0 8.625a1.125 1.125 0 100 2.25 1.125 1.125 0 000-2.25zM15.375 12a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM7.5 10.5a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zm10.5-1.5a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5z" clip-rule="evenodd" /></svg>`,
                 iconSize: [32, 32],
                 iconAnchor: [16, 32],
                 popupAnchor: [0, -32]
             });
 
-            elements.forEach(place => {
-                let lat, lng;
-                if (place.type === 'node') {
-                    lat = place.lat;
-                    lng = place.lon;
-                } else if (place.center) {
-                    lat = place.center.lat;
-                    lng = place.center.lon;
-                } else {
-                    return; // Skip if no coords
-                }
+            features.forEach(feature => {
+                const coords = feature.geometry.coordinates;
+                const props = feature.properties;
+                
+                // GeoJSON points are [lng, lat], Leaflet uses [lat, lng]
+                const lat = coords[1];
+                const lng = coords[0];
+                
+                // NPS Field Names
+                const name = props.RESNAME || "Historic Site";
+                const refNum = props.NRIS_Refnum || "Unknown";
 
-                const name = place.tags.name || "Unknown Historic Site";
-                const type = place.tags.historic || "Historic Site";
-                const id = place.id; // OSM ID
-
-                // Add marker
                 const marker = window.L.marker([lat, lng], { icon: historicIcon })
                     .bindPopup(
                         `<div class="text-center">
                             <h4 class="font-bold text-indigo-700 mb-1">${name}</h4>
-                            <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">${type}</span>
+                            <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">NRHP #${refNum}</span>
                             <button class="block w-full mt-3 text-sm text-white bg-indigo-500 hover:bg-indigo-600 px-3 py-1 rounded shadow-sm transition" 
-                                onclick="openCard('${id}', '${name.replace(/'/g, "\\'")}', '${type}')">
-                                Learn More
+                                onclick="openCard('${refNum}', '${name.replace(/'/g, "\\'")}', 'National Register of Historic Places')">
+                                View History
                             </button>
                         </div>`
                     );
@@ -349,16 +364,13 @@
 
             markersLayerGroup = window.L.layerGroup().addTo(map);
 
-            // Try to get user location immediately
             getUserLocation();
 
-            // Additional layout fix
             setTimeout(() => map.invalidateSize(), 250);
         }
 
         // --- UI INTERACTIONS ---
 
-        // Slider Logic
         const slider = document.getElementById('radiusSlider');
         const radiusLabel = document.getElementById('radiusValue');
 
@@ -368,10 +380,8 @@
         });
 
         slider.addEventListener('change', () => {
-            // Fetch only on release (change) to avoid API spam
             fetchNearbyLandmarks();
         });
-
 
         // --- CARD & AI LOGIC ---
 
@@ -389,14 +399,12 @@
             summarySection.classList.remove('hidden');
             card.classList.remove('hidden');
             
-            // Check Cache
             const cachedData = await getCachedDetails(id);
             if (cachedData) {
                 updateCardContent(cachedData.summary, cachedData.sources);
                 return;
             }
 
-            // Fetch AI
             loadingSpinner.classList.remove('hidden');
             try {
                 await fetchLandmarkDetails(id, name, type);
@@ -491,9 +499,7 @@
             }
         }
 
-        // Initialize
         document.addEventListener('DOMContentLoaded', initializeFirebase);
-        // Start map attempt
         initMap();
 
     </script>
