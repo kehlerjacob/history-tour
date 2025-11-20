@@ -391,7 +391,7 @@
         };
 
 
-        // --- MAP & GEO LOCATION LOGIC (Updated initMap) ---
+        // --- MAP & GEO LOCATION LOGIC (Updated watchPositionSuccess) ---
 
         const initMap = () => {
              // CRITICAL FIX: Wrap initialization in try/catch and call invalidateSize()
@@ -412,8 +412,6 @@
                 landmarkMarkers.addTo(map);
                 L.control.zoom({ position: 'bottomright' }).addTo(map);
                 map.on('moveend', fetchAndPinLandmarks);
-
-                // Removed radius slider initialization events
 
                 startWatchingPosition();
                 fetchAndPinLandmarks();
@@ -452,6 +450,7 @@
                         
                         // 2. Start continuous watch AFTER initial fix
                         watchingPosition = true;
+                        // Use high accuracy and low timeout for better real-time heading/position
                         watchId = navigator.geolocation.watchPosition(
                             watchPositionSuccess, 
                             watchPositionError, 
@@ -484,9 +483,6 @@
             const { latitude, longitude, heading } = position.coords;
             const newLatLong = [latitude, longitude];
 
-            // Update Status Bubble
-            document.getElementById('locationStatusText').textContent = `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`;
-
             // Initialize or move user marker
             if (!userMarker) {
                 userMarker = L.marker(newLatLong, { icon: userArrowIcon }).addTo(map).bindPopup("Your Location");
@@ -500,16 +496,26 @@
                 }
             }
 
-            // Update compass direction if available (using the updated CSS triangle element)
+            // --- HEADING LOGIC (UPDATED) ---
             const arrow = document.getElementById('userDirectionArrow');
-            if (arrow) {
-                 // Check if heading is null (common on some devices/browsers)
-                const currentHeading = heading !== null ? heading : 0; 
-                
-                // We rotate the arrow, applying a transition defined in CSS
-                // Note: CSS rotation starts at 0 degrees (Up/North)
-                arrow.style.transform = `rotate(${currentHeading}deg)`;
+            let headingText = "N/A";
+
+            // Check if heading is a valid number (it's often null or NaN if the device is stationary)
+            if (arrow && heading !== null && !isNaN(heading)) {
+                 // GeoLocation API heading is in degrees relative to true North (0-360)
+                // We rotate the arrow. CSS rotation starts at 0 degrees (Up/North)
+                arrow.style.transform = `rotate(${heading}deg)`;
+                headingText = `${heading.toFixed(1)}°`;
             }
+            
+            // Update Status Bubble - Include Heading
+            document.getElementById('locationStatusText').innerHTML = `
+                Lat: ${latitude.toFixed(4)}, 
+                Lng: ${longitude.toFixed(4)} 
+                <span class="text-indigo-400 ml-2">(Hdg: ${headingText})</span>
+            `;
+            // --- END HEADING LOGIC ---
+
 
             // Handle tour progression and instruction updates
             checkTourProgress(newLatLong);
