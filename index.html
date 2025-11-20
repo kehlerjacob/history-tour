@@ -47,6 +47,14 @@
             background: #a5b4fc; 
             border-radius: 2px;
         }
+
+        /* Ensure the custom arrow marker is positioned correctly by Leaflet */
+        .user-arrow-marker {
+            /* Leaflet sets position, we ensure the content inside is centered */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
     </style>
 </head>
 <body class="flex flex-col h-screen overflow-hidden">
@@ -134,6 +142,7 @@
 
         // App State
         let map = null;
+        let currentHeading = 0; // New state for device heading
         // Default to Washington D.C. (National Mall)
         let currentLat = 38.8893; 
         let currentLng = -77.0502;
@@ -165,7 +174,7 @@
 
         // --- GEOLOCATION & OVERPASS API UTILS ---
 
-        function updateStatus(msg, isError = false) {
+        function updateStatus(msg, isError = false, isContinuous = false) {
             const el = document.getElementById('locationStatus');
             const text = document.getElementById('locationStatusText');
             const dot = el.querySelector('div');
@@ -181,31 +190,87 @@
                 dot.classList.add('bg-green-500', 'animate-pulse');
             }
 
-            setTimeout(() => { el.classList.add('opacity-0'); }, 4000);
+            // Only hide after 4s if it's not continuous feedback (like the heading)
+            if (!isContinuous) {
+                setTimeout(() => { el.classList.add('opacity-0'); }, 4000);
+            }
+        }
+        
+        // Function to apply rotation to the user marker
+        function updateMarkerRotation(heading) {
+            if (userLocationMarker) {
+                const markerElement = userLocationMarker.getElement();
+                // Target the inner SVG to rotate only the arrow, not the entire Leaflet marker container
+                const svg = markerElement ? markerElement.querySelector('svg') : null;
+                
+                if (svg) {
+                    // Rotate the arrow by the magnetic heading. Since the SVG path is drawn 
+                    // pointing up (0 degrees North), we rotate by the heading angle.
+                    svg.style.transform = `rotate(${heading}deg)`;
+                }
+            }
         }
 
         function addUserMarker() {
             if (!map) return;
-            // The user's initial location is stored in currentLat/currentLng when GPS succeeds
             if (userLocationMarker) map.removeLayer(userLocationMarker);
             
-            // Custom blue dot for user location
+            // Custom Arrow Icon HTML (filled triangle pointing up)
+            // The padding and box-shadow create a nice white circle background
+            const arrowSVG = `
+                <div style="background-color: white; border-radius: 50%; padding: 5px; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+                    <svg viewBox="0 0 100 100" fill="#4f46e5" class="w-full h-full" style="width: 20px; height: 20px;">
+                        <!-- Triangle path pointing up -->
+                        <path d="M50 10 L 90 90 L 10 90 Z" />
+                    </svg>
+                </div>
+            `;
+
             const userIcon = window.L.divIcon({
-                className: 'bg-blue-600 border-2 border-white rounded-full shadow-xl',
-                iconSize: [16, 16],
-                html: ''
+                className: 'user-arrow-marker',
+                iconSize: [40, 40], // Size of the entire div icon container
+                iconAnchor: [20, 20], // Anchor at the center of the icon
+                html: arrowSVG
             });
             
-            userLocationMarker = window.L.marker([currentLat, currentLng], {icon: userIcon})
-                .addTo(map)
-                .bindPopup("Your Search Center")
-                .openPopup();
+            userLocationMarker = window.L.marker([currentLat, currentLng], {
+                icon: userIcon,
+            }).addTo(map)
+              .bindPopup("Your Location & Heading");
+            
+            // Apply initial rotation (or 0)
+            updateMarkerRotation(currentHeading);
+        }
+        
+        function startOrientationTracking() {
+            if (window.DeviceOrientationEvent) {
+                window.addEventListener('deviceorientation', (event) => {
+                    let heading = null;
+                    
+                    // iOS/Safari specific for true compass heading
+                    if (event.webkitCompassHeading) {
+                        heading = event.webkitCompassHeading; 
+                    } else if (event.alpha !== null) {
+                        // Standard alpha (magnetic North). We use 360 - alpha to match
+                        // the usual compass convention where 0 is North and rotation is clockwise.
+                        heading = 360 - event.alpha;
+                    }
+
+                    if (heading !== null && Math.abs(heading - currentHeading) > 1) { // Only update if significant change (>1 degree)
+                        currentHeading = heading;
+                        // Update status continuously without the auto-hide timeout
+                        updateStatus(`Loc: (${currentLat.toFixed(4)}, ${currentLng.toFixed(4)}) | Heading: ${currentHeading.toFixed(0)}°`, false, true); 
+                        updateMarkerRotation(currentHeading);
+                    }
+                }, false);
+            } else {
+                console.warn("DeviceOrientationEvent not supported. Heading arrow rotation disabled.");
+            }
         }
 
         function getUserLocation() {
             if (!navigator.geolocation) {
                 updateStatus("Geolocation not supported", true);
-                // Even without GPS, we start the search at the default D.C. coordinates
                 if (map) fetchNearbyLandmarks(); 
                 return;
             }
@@ -226,7 +291,6 @@
                     }
                 },
                 (error) => {
-                    // Geolocation error captured here, falling back to D.C.
                     console.error("Location error:", error);
                     updateStatus("Location denied. Using Default (D.C.)", true);
                     if (map) fetchNearbyLandmarks(); 
@@ -239,7 +303,6 @@
             const latChange = radiusMiles / 69.0;
             const lngChange = radiusMiles / (69.0 * Math.cos(lat * Math.PI / 180));
             
-            // Using 4 decimal places for precision, which is 11 meters, sufficient for BBOX searches.
             const precision = 4; 
             
             return {
@@ -250,14 +313,11 @@
             };
         }
 
-        // Renamed function to reflect use of Overpass API
         async function fetchNearbyLandmarks() {
             if (!map) return;
             
-            // Log 1: Coordinates and Radius
             console.log(`DEBUG: Starting search at Lat: ${currentLat}, Lng: ${currentLng} with Radius: ${currentRadiusMiles} miles.`);
 
-            // Update the search radius circle visualization, keeping it centered on currentLat/Lng
             const radiusMeters = currentRadiusMiles * MILES_TO_METERS;
             if (searchRadiusCircle) {
                 searchRadiusCircle.setLatLng([currentLat, currentLng]).setRadius(radiusMeters);
@@ -270,13 +330,11 @@
                 }).addTo(map);
             }
             
-            // Also ensure the user marker stays at the center of the search (initial location)
             addUserMarker();
 
             updateStatus(`Searching within ${currentRadiusMiles} mile(s) centered at (${currentLat.toFixed(4)}, ${currentLng.toFixed(4)})...`);
 
             const bbox = getBoundingBox(currentLat, currentLng, currentRadiusMiles);
-            // Log 2: Bounding Box
             console.log("DEBUG: Calculated Bounding Box (xmin, ymin, xmax, ymax):", bbox);
 
             // Format for Overpass QL: (south, west, north, east) -> (ymin, xmin, ymax, xmax)
@@ -297,7 +355,6 @@
 out center;
 `;
 
-            // Log 3: Full Query Body
             console.log("DEBUG: Overpass Query Body:\n", overpassQuery); 
 
             try {
@@ -307,7 +364,6 @@ out center;
                     body: `data=${encodeURIComponent(overpassQuery)}`
                 });
                 
-                // Log 4: Response Status
                 console.log(`DEBUG: Overpass API Response Status: ${response.status}`);
 
                 if (!response.ok) {
@@ -318,18 +374,15 @@ out center;
                 const data = await response.json();
                 
                 if (data.elements && data.elements.length > 0) {
-                    // Log 5: Success
                     console.log(`DEBUG: Overpass API Success. Found ${data.elements.length} features.`, data);
                     displayLandmarks(data.elements);
                     updateStatus(`Found ${data.elements.length} historic sites`);
                 } else {
-                    // Log 6: No features found (empty array)
                     console.warn("DEBUG: No elements returned from Overpass API. Full response data:", data);
                     updateStatus("No historic sites found nearby in OpenStreetMap", true);
                     if (markersLayerGroup) markersLayerGroup.clearLayers();
                 }
             } catch (error) {
-                // Log 7: General Fetch Error
                 console.error("DEBUG: General Error fetching landmarks:", error);
                 updateStatus(`Error connecting to OpenStreetMap: ${error.message.substring(0, 50)}...`, true);
             }
@@ -346,22 +399,18 @@ out center;
             }
 
             elements.forEach(element => {
-                // Coordinates come from 'lat' and 'lon' (or 'center' result if used)
                 const lat = element.lat; 
                 const lng = element.lon; 
                 const tags = element.tags || {};
                 
-                // Safety check for geometry
                 if (typeof lat === 'undefined' || typeof lng === 'undefined') return;
 
                 const id = `${element.type}-${element.id}`;
                 
-                // Store the raw element data
                 landmarksStore[id] = element;
 
                 const name = tags.name || tags.historic || `${element.type} ${element.id}`;
 
-                // Use default Leaflet marker (classic blue pin)
                 const marker = window.L.marker([lat, lng]) 
                     .bindPopup(
                         `<div class="text-center p-2">
@@ -383,7 +432,6 @@ out center;
         function initMap() {
             if (map) return;
             
-            // Polling check for Leaflet
             if (typeof window.L === 'undefined' || !window.L.map) {
                 setTimeout(initMap, 100);
                 return;
@@ -402,8 +450,9 @@ out center;
 
             markersLayerGroup = window.L.layerGroup().addTo(map);
             
-            // Start location search
+            // Start location and orientation tracking
             getUserLocation();
+            startOrientationTracking();
 
             setTimeout(() => map.invalidateSize(), 250);
         }
@@ -419,7 +468,6 @@ out center;
         });
 
         slider.addEventListener('change', () => {
-            // Trigger search using the FIXED initial coordinates (currentLat, currentLng)
             fetchNearbyLandmarks();
         });
 
@@ -481,7 +529,6 @@ out center;
 
         document.addEventListener('DOMContentLoaded', initializeFirebase);
         
-        // Ensure map tries to load
         if (document.readyState === "complete" || document.readyState === "interactive") {
             setTimeout(initMap, 100);
         } else {
