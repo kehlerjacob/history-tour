@@ -95,12 +95,13 @@
         </h3>
         <label for="tourDistance" class="block text-sm font-medium text-gray-700 mb-1">Desired Total Distance (Miles):</label>
         <div class="flex gap-2">
-            <input type="number" id="tourDistance" min="1" max="15" value="5" step="0.5" class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5">
+            <!-- Distance input is now mostly for context/guidance, but we won't use it to force round_trip -->
+            <input type="number" id="tourDistance" min="1" max="15" value="5" step="0.5" class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5" disabled title="Distance not used for route calculation in point-to-point tours.">
             <button onclick="createTour()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition flex-shrink-0">
                 Create
             </button>
         </div>
-        <p id="tourStatus" class="text-xs mt-2 text-gray-500"></p>
+        <p id="tourStatus" class="text-xs mt-2 text-gray-500">The tour will connect up to 7 closest landmarks and return to your start point.</p>
     </div>
 
     <!-- Map Container -->
@@ -545,39 +546,59 @@ out center;
 
         window.createTour = async function() {
             
+            // Although we aren't using this distance to force a round_trip length, we use it for validation
             const desiredDistanceMiles = parseFloat(document.getElementById('tourDistance').value);
             if (isNaN(desiredDistanceMiles) || desiredDistanceMiles <= 0) {
                 updateStatus("Please enter a valid distance.", true, false, 'tourStatus');
                 return;
             }
 
-            updateStatus("Generating tour route...", false, true, 'tourStatus');
+            updateStatus("Generating tour route by connecting closest landmarks...", false, true, 'tourStatus');
             
-            // 1. Get the list of all historic sites (not used for ORS input, but useful for user context)
+            // 1. Get the list of all historic sites
             const allLandmarks = Object.values(landmarksStore);
             if (allLandmarks.length === 0) {
                  updateStatus("No landmarks found. Please ensure the map has points before starting a tour.", true, false, 'tourStatus');
                  return;
             }
 
-            // 2. Prepare coordinates: 
-            // The ORS 'round_trip' option requires ONLY the starting point in the coordinates array.
-            const coords = [[currentLng, currentLat]]; // Length MUST be 1 (Lng, Lat)
+            // 2. Select landmarks: Sort by distance and select the closest N points for the tour stops.
+            const MAX_STOPS = 7; // Max intermediate stops for a reasonable tour path
             
-            // 3. Construct the ORS payload 
+            // Sort all landmarks by distance from user (closest first)
+            const sortedLandmarks = allLandmarks.sort((a, b) => a.distanceMiles - b.distanceMiles);
+
+            // Select the closest stops
+            const pointsToVisit = sortedLandmarks.slice(0, Math.min(sortedLandmarks.length, MAX_STOPS));
+
+            if (pointsToVisit.length === 0) {
+                 updateStatus("Need at least 1 landmark to create a tour loop.", true, false, 'tourStatus');
+                 return;
+            }
+
+            // 3. Prepare coordinates for OpenRouteService (Lng, Lat format)
+            // The route MUST be: Start -> L1 -> L2 -> ... -> LN -> Start
+            const coords = [];
+            
+            // Start point (user location)
+            coords.push([currentLng, currentLat]); 
+            
+            // Intermediate stops (the landmarks)
+            pointsToVisit.forEach(lm => {
+                coords.push([lm.lon, lm.lat]);
+            });
+            
+            // End point (back to user location)
+            coords.push([currentLng, currentLat]); 
+
+
+            // 4. Construct the ORS payload (standard multi-point route, NOT round_trip)
             const orsPayload = {
-                coordinates: coords, // Only the start point
-                options: {
-                    round_trip: { 
-                        // length in meters: desiredDistanceMiles * 1.60934 * 1000
-                        length: desiredDistanceMiles * 1000 * MILES_TO_KM 
-                    }
-                    // Note: Removed 'points' parameter to simplify and let ORS decide stops.
-                }
+                coordinates: coords, // Array of Lng, Lat pairs
             };
             
-            // Log the coordinates length to confirm the fix
             console.log("DEBUG: ORS Coordinates length:", coords.length);
+            console.log("DEBUG: Number of Landmarks visited:", pointsToVisit.length);
 
 
             // *** Inject the profile directly into the URL path as required by ORS V2 ***
@@ -585,7 +606,7 @@ out center;
             console.log("ORS Request URL (with Profile in path):", orsUrlWithKey);
 
 
-            // 4. ORS API Request (Round Trip)
+            // 5. ORS API Request
             try {
                 // Implementing exponential backoff for robustness
                 const maxRetries = 3;
@@ -598,7 +619,6 @@ out center;
                         response = await fetch(orsUrlWithKey, { // Use URL with profile and API key
                             method: 'POST',
                             headers: {
-                                // Omit Authorization header, as key is in URL
                                 'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8', 
                                 'Content-Type': 'application/json; charset=utf-8',
                             },
@@ -640,7 +660,7 @@ out center;
 
                 const geoJson = await response.json();
                 
-                // 5. Display the route
+                // 6. Display the route
                 if (geoJson.features && geoJson.features.length > 0) {
                     const routeFeature = geoJson.features[0];
                     const routeDistanceKm = routeFeature.properties.summary.distance / 1000;
@@ -654,16 +674,16 @@ out center;
                             opacity: 0.7
                         },
                         onEachFeature: function(feature, layer) {
-                            layer.bindPopup(`Tour Distance: ${routeDistanceMiles.toFixed(2)} miles.<br>Closest desired distance: ${desiredDistanceMiles.toFixed(1)} miles.`);
+                            layer.bindPopup(`Tour Distance: ${routeDistanceMiles.toFixed(2)} miles.<br>Stops: ${pointsToVisit.length} landmarks.`);
                         }
                     }).addTo(map);
 
                     // Fit map to the route boundaries
                     map.fitBounds(routeLayerGroup.getBounds().pad(0.1));
 
-                    updateStatus(`Tour created! Actual distance: ${routeDistanceMiles.toFixed(2)} miles.`, false, false, 'tourStatus');
+                    updateStatus(`Tour created! Distance: ${routeDistanceMiles.toFixed(2)} miles, visiting ${pointsToVisit.length} landmarks.`, false, false, 'tourStatus');
                 } else {
-                    updateStatus("ORS could not generate a viable loop. Try adjusting the distance.", true, false, 'tourStatus');
+                    updateStatus("ORS could not calculate a route between the stops. Try moving your location or reducing the number of stops.", true, false, 'tourStatus');
                 }
 
             } catch (error) {
