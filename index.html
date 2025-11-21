@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.7</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.8</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -1254,20 +1254,45 @@
 
             // Wikipedia API limit is 10,000 meters (approx 6.2 miles). 
             // We cannot search 10 miles (16km) in a single call.
+            // Wikipedia API limit is 10,000 meters (approx 6.2 miles). 
             const radiusMeters = 10000;
-
-            // Increased limit to 500 as requested
-            let url = `${WIKIPEDIA_API_URL}?action=query&list=geosearch&gsradius=${radiusMeters}&gscoord=${lat}|${lon}&gslimit=500&format=json&origin=*`;
-
-            console.log("Fetching URL:", url);
+            let allPages = [];
+            let continueToken = null;
+            let fetchCount = 0;
+            const MAX_FETCHES = 5; // Fetch up to 2500 raw results (5 * 500)
 
             try {
-                const data = await fetchWithRetry(url);
-                const pages = data.query?.geosearch || [];
-                console.log("Raw pages found:", pages.length);
+                do {
+                    let url = `${WIKIPEDIA_API_URL}?action=query&list=geosearch&gsradius=${radiusMeters}&gscoord=${lat}|${lon}&gslimit=500&format=json&origin=*`;
+
+                    if (continueToken) {
+                        // Append continue parameters if they exist
+                        for (const key in continueToken) {
+                            url += `&${key}=${encodeURIComponent(continueToken[key])}`;
+                        }
+                    }
+
+                    console.log(`Fetching batch ${fetchCount + 1}:`, url);
+                    const data = await fetchWithRetry(url);
+
+                    const pages = data.query?.geosearch || [];
+                    allPages = allPages.concat(pages);
+
+                    // Check for continuation
+                    if (data.continue) {
+                        continueToken = data.continue;
+                    } else {
+                        continueToken = null;
+                    }
+
+                    fetchCount++;
+
+                } while (continueToken && fetchCount < MAX_FETCHES);
+
+                console.log("Total raw pages found:", allPages.length);
 
                 // Strict filtering for "statue", "house", or "building"
-                const filteredPages = pages.filter(p => {
+                const filteredPages = allPages.filter(p => {
                     const title = p.title.toLowerCase();
                     return title.includes('statue') || title.includes('house') || title.includes('building');
                 });
@@ -1275,8 +1300,7 @@
                 console.log("Filtered pages:", filteredPages.length);
 
                 if (filteredPages.length === 0) {
-                    // Alert the user if strict filtering removed everything
-                    alert(`Debug: Found ${pages.length} raw results, but 0 matched 'statue', 'house', or 'building'. Try moving the map.`);
+                    alert(`Debug: Found ${allPages.length} raw results, but 0 matched 'statue', 'house', or 'building'. Try moving the map.`);
                 }
 
                 filteredPages.forEach(p => {
