@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v3.2</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v3.3</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -218,13 +218,13 @@
 
 
     <!-- Tour Panel (Slide-up Card with Tabs) -->
-    <div id="tourPanel" style="padding-bottom: calc(env(safe-area-inset-bottom, 20px) + 2rem);"
-        class="fixed inset-x-0 bottom-0 bg-white text-gray-800 p-4 sm:p-6 shadow-2xl rounded-t-3xl transition-all duration-300 transform translate-y-full opacity-0 z-[5000] max-h-[80vh] overflow-y-auto">
+    <div id="tourPanel" style="padding-bottom: calc(env(safe-area-inset-bottom, 20px) + 1rem);"
+        class="fixed inset-x-0 bottom-0 bg-white text-gray-800 p-3 sm:p-4 shadow-2xl rounded-t-3xl transition-all duration-300 transform translate-y-full opacity-0 z-[5000] max-h-[65vh] overflow-y-auto">
         <div class="max-w-4xl mx-auto flex flex-col">
 
             <!-- Header with Close Button -->
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-2xl font-bold text-indigo-700">Configure Tour</h3>
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="text-xl font-bold text-indigo-700">Configure Tour</h3>
                 <button onclick="closeTourPanel()" class="text-gray-400 hover:text-gray-600 transition">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
@@ -234,7 +234,7 @@
             </div>
 
             <!-- Tab Navigation -->
-            <div class="flex gap-2 mb-4 border-b border-gray-200">
+            <div class="flex gap-2 mb-3 border-b border-gray-200">
                 <button id="distanceTabBtn" onclick="switchTourTab('distance')"
                     class="px-4 py-2 font-semibold text-indigo-600 border-b-2 border-indigo-600 transition">
                     Distance-Based
@@ -263,10 +263,10 @@
 
             <!-- Custom Tour Tab -->
             <div id="customTab" class="tour-tab hidden">
-                <p class="text-sm text-gray-600 mb-3">Select landmarks to visit (tap cards to add/remove):</p>
+                <p class="text-xs text-gray-600 mb-2">Select landmarks to visit:</p>
 
                 <!-- Selected Count -->
-                <div class="mb-3 flex items-center gap-2">
+                <div class="mb-2 flex items-center gap-2">
                     <span class="text-sm font-semibold text-indigo-600">Selected: <span
                             id="selectedCount">0</span></span>
                     <button onclick="clearSelectedLandmarks()"
@@ -275,7 +275,7 @@
 
                 <!-- Horizontal Scrollable Landmark Cards -->
                 <div id="landmarkCardsContainer"
-                    class="flex gap-3 overflow-x-auto pb-4 mb-4 snap-x snap-mandatory scrollbar-hide">
+                    class="flex gap-2 overflow-x-auto pb-2 mb-2 snap-x snap-mandatory scrollbar-hide">
                     <!-- Cards will be dynamically inserted here -->
                     <div class="text-center text-gray-400 py-8 w-full">
                         <p>Loading landmarks...</p>
@@ -283,12 +283,12 @@
                 </div>
 
                 <!-- Status Text -->
-                <p id="tourStatus" class="text-sm text-gray-500 mb-4">Creates an optimized route through your selected
+                <p id="tourStatus" class="text-xs text-gray-500 mb-2">Creates an optimized route through your selected
                     stops.</p>
 
                 <!-- Create Custom Tour Button -->
                 <button onclick="createCustomTour(); closeTourPanel();"
-                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition duration-200 shadow-lg disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-xl transition duration-200 shadow-lg disabled:bg-gray-400 disabled:cursor-not-allowed"
                     id="createCustomTourBtn" disabled>
                     Create Custom Tour
                 </button>
@@ -900,7 +900,7 @@
 
             sortedLandmarks.forEach((point, index) => {
                 const card = document.createElement('div');
-                card.className = 'flex-shrink-0 w-48 bg-white border-2 border-gray-200 rounded-xl overflow-hidden snap-start transition-all duration-200 hover:shadow-lg';
+                card.className = 'flex-shrink-0 w-40 bg-white border-2 border-gray-200 rounded-xl overflow-hidden snap-start transition-all duration-200 hover:shadow-lg';
                 card.id = `landmark-card-${point.title.replace(/\s/g, '-')}`;
 
                 const isSelected = selectedLandmarks.some(l => l.title === point.title);
@@ -912,16 +912,16 @@
                 const distanceMiles = (point.distanceFromUser / 1609.34).toFixed(1);
 
                 card.innerHTML = `
-                    <div class="h-32 bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-4xl font-bold">
+                    <div class="h-24 bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-3xl font-bold">
                         ${point.title.charAt(0)}
                     </div>
-                    <div class="p-3">
-                        <h4 class="font-semibold text-sm text-gray-800 mb-1 line-clamp-2 h-10">${point.title}</h4>
-                        <p class="text-xs text-gray-500 mb-2">${distanceMiles} mi away</p>
+                    <div class="p-2">
+                        <h4 class="font-semibold text-xs text-gray-800 mb-1 line-clamp-2 h-8">${point.title}</h4>
+                        <p class="text-xs text-gray-500 mb-1">${distanceMiles} mi</p>
                         <button onclick="toggleLandmarkSelection('${point.title.replace(/'/g, "\\'")}', ${point.lat}, ${point.lon})" 
                             id="btn-${index}"
-                            class="${isSelected ? 'bg-red-500 hover:bg-red-600' : 'bg-indigo-600 hover:bg-indigo-700'} text-white text-xs font-bold py-2 px-3 rounded-lg w-full transition">
-                            ${isSelected ? 'Remove' : 'Add to Tour'}
+                            class="${isSelected ? 'bg-red-500 hover:bg-red-600' : 'bg-indigo-600 hover:bg-indigo-700'} text-white text-xs font-bold py-1.5 px-2 rounded-lg w-full transition">
+                            ${isSelected ? 'Remove' : 'Add'}
                         </button>
                     </div>
                 `;
