@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v3.5</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v3.6</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -591,7 +591,7 @@
                 }
             } catch (error) {
                 console.error("OSRM Routing Error:", error);
-                showMessage("Routing Failed", "Could not calculate a walking route. Showing straight line instead.");
+                // Silently return null - caller will handle fallback
                 return null;
             }
         }
@@ -1119,23 +1119,33 @@
                 const allRouteCoordinates = [];
                 let totalDistance = 0;
                 let totalDuration = 0;
+                let successfulRoutes = 0;
+
+                console.log(`Fetching routes for ${tourRoute.length - 1} segments...`);
 
                 for (let i = 0; i < tourRoute.length - 1; i++) {
                     const start = tourRoute[i];
                     const end = tourRoute[i + 1];
 
+                    console.log(`Fetching route ${i + 1}/${tourRoute.length - 1}: ${start.title} -> ${end.title}`);
                     const routeData = await fetchWalkingRoute(start.lat, start.lon, end.lat, end.lon);
 
-                    if (routeData && routeData.path) {
+                    if (routeData && routeData.path && routeData.path.length > 0) {
                         // Add the route coordinates
+                        console.log(`✓ Route ${i + 1} fetched: ${routeData.path.length} points, ${(routeData.distance / 1609.34).toFixed(2)} mi`);
                         allRouteCoordinates.push(...routeData.path);
                         totalDistance += routeData.distance;
                         totalDuration += routeData.duration;
+                        successfulRoutes++;
                     } else {
                         // Fallback to straight line if routing fails
+                        console.warn(`✗ Route ${i + 1} failed, using straight line`);
                         allRouteCoordinates.push([start.lat, start.lon], [end.lat, end.lon]);
                     }
                 }
+
+                console.log(`Route fetching complete: ${successfulRoutes}/${tourRoute.length - 1} successful`);
+                console.log(`Total coordinates: ${allRouteCoordinates.length}`);
 
                 // Draw the complete walking route as a dashed line
                 if (tourPath) map.removeLayer(tourPath);
