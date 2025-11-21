@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.5</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.6</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -986,8 +986,8 @@
             const userLat = refLatLong.lat;
             const userLon = refLatLong.lng;
 
-            // Filter landmarks within 10 mile radius and calculate distances
-            const TEN_MILES_IN_METERS = 10 * 1609.34;
+            // Filter landmarks within 10km radius (API limit) and calculate distances
+            const TEN_KM_IN_METERS = 10000;
             const landmarksWithDistance = tourPoints.map(point => {
                 const distanceFromUser = getDistance(userLat, userLon, point.lat, point.lon);
 
@@ -995,7 +995,7 @@
                     ...point,
                     distanceFromUser
                 };
-            }).filter(point => point.distanceFromUser <= TEN_MILES_IN_METERS);
+            }).filter(point => point.distanceFromUser <= TEN_KM_IN_METERS);
 
             // Sort by proximity to current location
             const sortedLandmarks = landmarksWithDistance.sort((a, b) => {
@@ -1005,7 +1005,7 @@
             container.innerHTML = '';
 
             if (sortedLandmarks.length === 0) {
-                container.innerHTML = '<div class="text-center text-gray-400 py-8 w-full"><p>No landmarks within 10 miles. Move the map to a different location.</p></div>';
+                container.innerHTML = '<div class="text-center text-gray-400 py-8 w-full"><p>No landmarks within 10km (6.2 mi). Move the map to a different location.</p></div>';
                 return;
             }
 
@@ -1252,8 +1252,9 @@
             landmarkMarkers.clearLayers();
             tourPoints = [];
 
-            // Use 10 miles (approx 16093 meters) for the API call
-            const radiusMeters = 16093;
+            // Wikipedia API limit is 10,000 meters (approx 6.2 miles). 
+            // We cannot search 10 miles (16km) in a single call.
+            const radiusMeters = 10000;
 
             // Increased limit to 500 as requested
             let url = `${WIKIPEDIA_API_URL}?action=query&list=geosearch&gsradius=${radiusMeters}&gscoord=${lat}|${lon}&gslimit=500&format=json&origin=*`;
