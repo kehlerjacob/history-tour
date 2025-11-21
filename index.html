@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.10</span>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.11</span>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -1322,7 +1322,8 @@
                     // Split into chunks of 50 (API limit for titles/pageids) if necessary, 
                     // but for now we'll assume filtered count is manageable or just take the first 50 if it's huge.
                     // Actually, let's just do one batch for simplicity and speed.
-                    const imageApiUrl = `${WIKIPEDIA_API_URL}?action=query&prop=pageimages&pithumbsize=400&pageids=${pageIds}&format=json&origin=*`;
+                    // Reduced thumbnail size to 200px for faster mobile loading
+                    const imageApiUrl = `${WIKIPEDIA_API_URL}?action=query&prop=pageimages&pithumbsize=200&pageids=${pageIds}&format=json&origin=*`;
 
                     try {
                         const imgData = await fetchWithRetry(imageApiUrl);
