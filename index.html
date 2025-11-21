@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v3.4</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v3.5</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -1069,7 +1069,7 @@
         };
 
 
-        const createTour = (reset = false) => {
+        const createTour = async (reset = false) => {
             const maxDistanceMiles = parseFloat(document.getElementById('tourDistance').value);
             const maxDistanceMeters = maxDistanceMiles * 1609.34;
 
@@ -1112,15 +1112,44 @@
             currentManeuverIndex = -1;
 
             try {
-                // Draw initial Straight Line Path (Pre-Navigation)
+                // Show loading message
+                document.getElementById('tourStatus').textContent = 'Calculating walking routes...';
+
+                // Fetch actual walking routes for all segments
+                const allRouteCoordinates = [];
+                let totalDistance = 0;
+                let totalDuration = 0;
+
+                for (let i = 0; i < tourRoute.length - 1; i++) {
+                    const start = tourRoute[i];
+                    const end = tourRoute[i + 1];
+
+                    const routeData = await fetchWalkingRoute(start.lat, start.lon, end.lat, end.lon);
+
+                    if (routeData && routeData.path) {
+                        // Add the route coordinates
+                        allRouteCoordinates.push(...routeData.path);
+                        totalDistance += routeData.distance;
+                        totalDuration += routeData.duration;
+                    } else {
+                        // Fallback to straight line if routing fails
+                        allRouteCoordinates.push([start.lat, start.lon], [end.lat, end.lon]);
+                    }
+                }
+
+                // Draw the complete walking route as a dashed line
                 if (tourPath) map.removeLayer(tourPath);
-                const straightLineCoords = tourRoute.map(p => L.latLng(p.lat, p.lon));
-                tourPath = L.polyline(straightLineCoords, {
+                tourPath = L.polyline(allRouteCoordinates, {
                     color: '#84cc16',
-                    weight: 3,
-                    opacity: 0.5,
+                    weight: 4,
+                    opacity: 0.7,
                     dashArray: '10, 10'
                 }).addTo(map);
+
+                // Display total distance and duration
+                const distanceMiles = (totalDistance / 1609.34).toFixed(1);
+                const durationMinutes = Math.round(totalDuration / 60);
+                document.getElementById('tourStatus').textContent = `Tour ready: ${distanceMiles} mi, ~${durationMinutes} min walking`;
 
                 document.getElementById('navigationPanel').classList.remove('translate-y-full', 'opacity-0');
                 document.getElementById('tourPanel').classList.add('hidden');
@@ -1138,7 +1167,7 @@
                 console.error("Create Tour Error:", e);
                 showMessage("Tour Error", "Failed to create tour: " + e.message);
             }
-        }
+        };
 
 
         /**
