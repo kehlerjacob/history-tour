@@ -153,7 +153,8 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.9</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.10</span>
+                </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -1022,10 +1023,12 @@
                 // Calculate distance in miles for display
                 const distanceMiles = (point.distanceFromUser / 1609.34).toFixed(1);
 
+                const imageHtml = point.imageUrl
+                    ? `<img src="${point.imageUrl}" alt="${point.title}" class="h-24 w-full object-cover">`
+                    : `<div class="h-24 bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-3xl font-bold">${point.title.charAt(0)}</div>`;
+
                 card.innerHTML = `
-                    <div class="h-24 bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-3xl font-bold">
-                        ${point.title.charAt(0)}
-                    </div>
+                    ${imageHtml}
                     <div class="p-2">
                         <h4 class="font-semibold text-xs text-gray-800 mb-1 line-clamp-2 h-8">${point.title}</h4>
                         <p class="text-xs text-gray-500 mb-1">${distanceMiles} mi</p>
@@ -1310,8 +1313,35 @@
                     alert(`Debug: Scanned ${allPages.length} raw items, but 0 matched 'statue', 'house', or 'building'. Try moving the map.`);
                 }
 
+                // Extract page IDs for image fetching
+                const pageIds = filteredPages.map(p => p.pageid).join('|');
+                let pageImages = {};
+
+                if (pageIds) {
+                    // Fetch images for the filtered pages
+                    // Split into chunks of 50 (API limit for titles/pageids) if necessary, 
+                    // but for now we'll assume filtered count is manageable or just take the first 50 if it's huge.
+                    // Actually, let's just do one batch for simplicity and speed.
+                    const imageApiUrl = `${WIKIPEDIA_API_URL}?action=query&prop=pageimages&pithumbsize=400&pageids=${pageIds}&format=json&origin=*`;
+
+                    try {
+                        const imgData = await fetchWithRetry(imageApiUrl);
+                        const pagesWithImages = imgData.query?.pages || {};
+
+                        // Map pageid to thumbnail URL
+                        Object.values(pagesWithImages).forEach(p => {
+                            if (p.thumbnail && p.thumbnail.source) {
+                                pageImages[p.pageid] = p.thumbnail.source;
+                            }
+                        });
+                    } catch (imgError) {
+                        console.warn("Failed to fetch images:", imgError);
+                    }
+                }
+
                 filteredPages.forEach(p => {
-                    pinLandmark(p.lat, p.lon, p.title, `https://en.wikipedia.org/?curid=${p.pageid}`);
+                    const imageUrl = pageImages[p.pageid] || null;
+                    pinLandmark(p.lat, p.lon, p.title, `https://en.wikipedia.org/?curid=${p.pageid}`, imageUrl);
                 });
 
                 isFetching = false;
@@ -1324,16 +1354,25 @@
             }
         };
 
-        const pinLandmark = (lat, lon, title, url) => {
+        const pinLandmark = (lat, lon, title, url, imageUrl) => {
             const marker = L.marker([lat, lon], { icon: landmarkIcon }).addTo(landmarkMarkers);
-            const popupContent = `
+
+            let popupHtml = ``;
+            if (imageUrl) {
+                popupHtml += `<div class="mb-2 w-full h-32 bg-gray-100 rounded-lg overflow-hidden">
+                    <img src="${imageUrl}" alt="${title}" class="w-full h-full object-cover">
+                </div>`;
+            }
+
+            popupHtml += `
                 <div class="font-bold text-indigo-700">${title}</div>
                 <div class="text-sm mt-1">
                     <a href="${url}" target="_blank" class="text-indigo-500 hover:text-indigo-700 underline">Read on Wikipedia</a>
                 </div>
             `;
-            marker.bindPopup(popupContent);
-            tourPoints.push({ lat, lon, title, isWiki: true, url, marker });
+
+            marker.bindPopup(popupHtml);
+            tourPoints.push({ lat, lon, title, isWiki: true, url, marker, imageUrl });
         };
 
         const fetchAndPinLandmarks = () => {
