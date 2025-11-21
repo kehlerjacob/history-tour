@@ -13,81 +13,6 @@
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 
-    <script>
-        // --- GLOBAL ERROR HANDLER & DIAGNOSTICS ---
-        window.onerror = function (msg, url, lineNo, columnNo, error) {
-            const errorContainer = document.createElement('div');
-            errorContainer.style.position = 'fixed';
-            errorContainer.style.top = '0';
-            errorContainer.style.left = '0';
-            errorContainer.style.width = '100%';
-            errorContainer.style.backgroundColor = 'rgba(220, 38, 38, 0.95)'; // Red
-            errorContainer.style.color = 'white';
-            errorContainer.style.padding = '1rem';
-            errorContainer.style.zIndex = '99999';
-            errorContainer.style.fontSize = '12px';
-            errorContainer.style.fontFamily = 'monospace';
-            errorContainer.style.wordBreak = 'break-all';
-            errorContainer.innerHTML = `<strong>ERROR:</strong> ${msg}<br>Line: ${lineNo} Col: ${columnNo}<br>URL: ${url}`;
-            document.body.appendChild(errorContainer);
-            return false;
-        };
-
-        // --- PROMISE REJECTION HANDLER ---
-        window.addEventListener('unhandledrejection', function (event) {
-            const errorContainer = document.createElement('div');
-            errorContainer.style.position = 'fixed';
-            errorContainer.style.top = '60px';
-            errorContainer.style.left = '0';
-            errorContainer.style.width = '100%';
-            errorContainer.style.backgroundColor = 'rgba(239, 68, 68, 0.95)'; // Red
-            errorContainer.style.color = 'white';
-            errorContainer.style.padding = '1rem';
-            errorContainer.style.zIndex = '99999';
-            errorContainer.style.fontSize = '12px';
-            errorContainer.style.fontFamily = 'monospace';
-            errorContainer.style.wordBreak = 'break-all';
-            errorContainer.innerHTML = `<strong>PROMISE REJECTION:</strong> ${event.reason}`;
-            document.body.appendChild(errorContainer);
-        });
-
-        // --- CONSOLE ERROR OVERRIDE ---
-        const originalConsoleError = console.error;
-        console.error = function (...args) {
-            originalConsoleError.apply(console, args);
-            const errorContainer = document.createElement('div');
-            errorContainer.style.position = 'fixed';
-            errorContainer.style.top = '120px';
-            errorContainer.style.left = '0';
-            errorContainer.style.width = '100%';
-            errorContainer.style.backgroundColor = 'rgba(185, 28, 28, 0.95)'; // Dark Red
-            errorContainer.style.color = 'white';
-            errorContainer.style.padding = '1rem';
-            errorContainer.style.zIndex = '99999';
-            errorContainer.style.fontSize = '12px';
-            errorContainer.style.fontFamily = 'monospace';
-            errorContainer.style.wordBreak = 'break-all';
-            errorContainer.innerHTML = `<strong>CONSOLE ERROR:</strong> ${args.join(' ')}`;
-            document.body.appendChild(errorContainer);
-        };
-
-        // --- SECURE CONTEXT CHECK ---
-        if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && window.location.protocol !== 'https:' && window.location.protocol !== 'file:') {
-            const warningContainer = document.createElement('div');
-            warningContainer.style.position = 'fixed';
-            warningContainer.style.top = '50px';
-            warningContainer.style.left = '0';
-            warningContainer.style.width = '100%';
-            warningContainer.style.backgroundColor = 'rgba(234, 179, 8, 0.95)'; // Yellow
-            warningContainer.style.color = 'black';
-            warningContainer.style.padding = '1rem';
-            warningContainer.style.zIndex = '99999';
-            warningContainer.style.textAlign = 'center';
-            warningContainer.innerHTML = `<strong>WARNING: Geolocation requires HTTPS!</strong><br>You are running on ${window.location.protocol}. GPS may fail.`;
-            document.body.appendChild(warningContainer);
-        }
-    </script>
-
     <!-- Leaflet Polyline Decoders/Encoders - required for OSRM routes -->
     <script src="https://unpkg.com/@mapbox/polyline@1.0.0/src/polyline.js"></script>
 
@@ -228,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v2.3</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v2.4</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
