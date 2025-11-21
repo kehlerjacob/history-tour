@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v4.5</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v4.6</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -1136,13 +1136,25 @@
                             midpoint: routeData.path[Math.floor(routeData.path.length / 2)]
                         });
 
-                        totalDistance += routeData.distance;
                         totalDuration += routeData.duration;
                         successfulRoutes++;
                     } else {
                         // Fallback to straight line if routing fails
                         console.warn(`✗ Route ${i + 1} failed, using straight line`);
                         allRouteCoordinates.push([start.lat, start.lon], [end.lat, end.lon]);
+
+                        // Calculate straight-line distance for fallback
+                        const fallbackDist = getDistance(start.lat, start.lon, end.lat, end.lon);
+                        totalDistance += fallbackDist;
+                        // Estimate duration (walking speed ~1.4 m/s)
+                        totalDuration += fallbackDist / 1.4;
+
+                        segmentData.push({
+                            start: allRouteCoordinates.length - 2,
+                            end: allRouteCoordinates.length - 1,
+                            distance: fallbackDist,
+                            midpoint: [(start.lat + end.lat) / 2, (start.lon + end.lon) / 2]
+                        });
                     }
                 }
 
@@ -1156,10 +1168,10 @@
                 // Draw the complete walking route as a dashed line (preview mode)
                 if (tourPath) map.removeLayer(tourPath);
                 tourPath = L.polyline(allRouteCoordinates, {
-                    color: '#4f46e5',
+                    color: '#7c3aed',  // Purple color
                     weight: 4,
                     opacity: 0.7,
-                    dashArray: '10, 5'
+                    dashArray: '10, 10'
                 }).addTo(map);
 
                 // Initialize completed path layer (will be updated as user moves)
@@ -1351,6 +1363,12 @@
                         // Fallback to straight line if routing fails
                         console.warn(`✗ Route ${i + 1} failed, using straight line`);
                         allRouteCoordinates.push([start.lat, start.lon], [end.lat, end.lon]);
+
+                        // Calculate straight-line distance for fallback
+                        const fallbackDist = getDistance(start.lat, start.lon, end.lat, end.lon);
+                        totalDistance += fallbackDist;
+                        // Estimate duration (walking speed ~1.4 m/s)
+                        totalDuration += fallbackDist / 1.4;
                     }
                 }
 
