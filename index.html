@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v3.9</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v4.0</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -287,7 +287,7 @@
                     stops.</p>
 
                 <!-- Create Custom Tour Button -->
-                <button onclick="createCustomTour(); closeTourPanel();"
+                <button onclick="handleCreateCustomTour()"
                     class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-xl transition duration-200 shadow-lg disabled:bg-gray-400 disabled:cursor-not-allowed"
                     id="createCustomTourBtn" disabled>
                     Create Custom Tour
@@ -973,7 +973,16 @@
             }
         };
 
-        const createCustomTour = () => {
+        // Wrapper function to handle async createCustomTour
+        const handleCreateCustomTour = async () => {
+            console.log("handleCreateCustomTour called");
+            closeTourPanel();
+            await createCustomTour();
+        };
+
+        const createCustomTour = async () => {
+            console.log("createCustomTour function started");
+
             if (selectedLandmarks.length < 2) {
                 showMessage("Not Enough Stops", "Please select at least 2 landmarks for your custom tour.");
                 return;
@@ -993,15 +1002,54 @@
                 tourRoute = [startPoint, ...selectedLandmarks, startPoint];
                 currentTourStep = 0;
 
-                // Draw the tour path
-                const pathCoords = tourRoute.map(p => [p.lat, p.lon]);
+                // Show loading message
+                document.getElementById('tourStatus').textContent = 'Calculating walking routes...';
+
+                // Fetch actual walking routes for all segments
+                const allRouteCoordinates = [];
+                let totalDistance = 0;
+                let totalDuration = 0;
+                let successfulRoutes = 0;
+
+                console.log(`Fetching routes for ${tourRoute.length - 1} segments...`);
+
+                for (let i = 0; i < tourRoute.length - 1; i++) {
+                    const start = tourRoute[i];
+                    const end = tourRoute[i + 1];
+
+                    console.log(`Fetching route ${i + 1}/${tourRoute.length - 1}: ${start.title} -> ${end.title}`);
+                    const routeData = await fetchWalkingRoute(start.lat, start.lon, end.lat, end.lon);
+
+                    if (routeData && routeData.path && routeData.path.length > 0) {
+                        // Add the route coordinates
+                        console.log(`✓ Route ${i + 1} fetched: ${routeData.path.length} points, ${(routeData.distance / 1609.34).toFixed(2)} mi`);
+                        allRouteCoordinates.push(...routeData.path);
+                        totalDistance += routeData.distance;
+                        totalDuration += routeData.duration;
+                        successfulRoutes++;
+                    } else {
+                        // Fallback to straight line if routing fails
+                        console.warn(`✗ Route ${i + 1} failed, using straight line`);
+                        allRouteCoordinates.push([start.lat, start.lon], [end.lat, end.lon]);
+                    }
+                }
+
+                console.log(`Route fetching complete: ${successfulRoutes}/${tourRoute.length - 1} successful`);
+                console.log(`Total coordinates: ${allRouteCoordinates.length}`);
+
+                // Draw the complete walking route as a dashed line
                 if (tourPath) map.removeLayer(tourPath);
-                tourPath = L.polyline(pathCoords, {
+                tourPath = L.polyline(allRouteCoordinates, {
                     color: '#4f46e5',
                     weight: 4,
                     opacity: 0.7,
                     dashArray: '10, 5'
                 }).addTo(map);
+
+                // Display total distance and duration
+                const distanceMiles = (totalDistance / 1609.34).toFixed(1);
+                const durationMinutes = Math.round(totalDuration / 60);
+                document.getElementById('tourStatus').textContent = `Tour ready: ${distanceMiles} mi, ~${durationMinutes} min walking`;
 
                 document.getElementById('navigationPanel').classList.remove('translate-y-full', 'opacity-0');
 
@@ -1015,7 +1063,7 @@
                 updateNavigationPanel();
                 map.fitBounds(tourPath.getBounds(), { padding: [50, 50] });
 
-                showMessage("Custom Tour Created", `Your tour includes ${selectedLandmarks.length} stops!`);
+                showMessage("Custom Tour Created", `Your tour includes ${selectedLandmarks.length} stops! Total: ${distanceMiles} mi, ~${durationMinutes} min`);
             } catch (e) {
                 console.error("Create Custom Tour Error:", e);
                 showMessage("Tour Error", "Failed to create custom tour: " + e.message);
