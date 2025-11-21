@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.2</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.3</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -202,18 +202,7 @@
             </div>
         </div>
 
-        <!-- Filter Row 2 (Full Width) -->
-        <div class="flex items-center gap-3 w-full max-w-4xl mx-auto">
 
-            <!-- Category Filter Input -->
-            <div class="flex-grow bg-indigo-700 rounded-lg p-2 flex items-center gap-2 w-full">
-                <label for="categoryFilter"
-                    class="text-white text-xs font-medium whitespace-nowrap hidden sm:block">Filter by Keyword:</label>
-                <input type="text" id="categoryFilter" placeholder="e.g., house, museum, park (5km Search Radius)"
-                    onchange="fetchAndPinLandmarks()"
-                    class="w-full p-1 bg-indigo-800 text-white placeholder-indigo-300 text-xs rounded-md focus:ring-indigo-300 focus:border-indigo-300">
-            </div>
-        </div>
     </header>
 
 
@@ -421,7 +410,7 @@
         let currentSensorHeading = null; // Stores live heading from deviceorientation sensor
 
         // CONSTANT: Fixed search radius in kilometers (5 miles is approx 8.04672 km, sticking to 5km for precision)
-        const FIXED_SEARCH_RADIUS_KM = 5;
+        const FIXED_SEARCH_RADIUS_KM = 10;
 
         // Custom Marker Icon for User Location (Simple Arrow)
         const userArrowIcon = L.divIcon({
@@ -997,8 +986,8 @@
             const userLat = refLatLong.lat;
             const userLon = refLatLong.lng;
 
-            // Filter landmarks within 5 mile radius and calculate distances
-            const FIVE_MILES_IN_METERS = 5 * 1609.34;
+            // Filter landmarks within 10 mile radius and calculate distances
+            const TEN_MILES_IN_METERS = 10 * 1609.34;
             const landmarksWithDistance = tourPoints.map(point => {
                 const distanceFromUser = getDistance(userLat, userLon, point.lat, point.lon);
 
@@ -1006,7 +995,7 @@
                     ...point,
                     distanceFromUser
                 };
-            }).filter(point => point.distanceFromUser <= FIVE_MILES_IN_METERS);
+            }).filter(point => point.distanceFromUser <= TEN_MILES_IN_METERS);
 
             // Sort by proximity to current location
             const sortedLandmarks = landmarksWithDistance.sort((a, b) => {
@@ -1016,7 +1005,7 @@
             container.innerHTML = '';
 
             if (sortedLandmarks.length === 0) {
-                container.innerHTML = '<div class="text-center text-gray-400 py-8 w-full"><p>No landmarks within 5 miles. Move the map to a different location.</p></div>';
+                container.innerHTML = '<div class="text-center text-gray-400 py-8 w-full"><p>No landmarks within 10 miles. Move the map to a different location.</p></div>';
                 return;
             }
 
@@ -1257,14 +1246,14 @@
         };
 
 
-        const fetchWikipediaLandmarks = async (lat, lon, keyword) => {
+        const fetchWikipediaLandmarks = async (lat, lon) => {
             if (isFetching) return;
             isFetching = true;
             landmarkMarkers.clearLayers();
             tourPoints = [];
 
-            // Use 5 miles (approx 8046 meters) for the API call
-            const radiusMeters = 8046;
+            // Use 10 miles (approx 16093 meters) for the API call
+            const radiusMeters = 16093;
 
             // Increased limit to 500 as requested
             let url = `${WIKIPEDIA_API_URL}?action=query&list=geosearch&gsradius=${radiusMeters}&gscoord=${lat}|${lon}&gslimit=500&format=json&origin=*`;
@@ -1308,8 +1297,7 @@
         const fetchAndPinLandmarks = () => {
             const center = map.getCenter();
             // Pass the fixed radius implicitly
-            const keyword = document.getElementById('categoryFilter').value.trim();
-            fetchWikipediaLandmarks(center.lat, center.lng, keyword);
+            fetchWikipediaLandmarks(center.lat, center.lng);
         };
 
 
