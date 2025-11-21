@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v4.6</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v4.7</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -1170,8 +1170,9 @@
                 tourPath = L.polyline(allRouteCoordinates, {
                     color: '#7c3aed',  // Purple color
                     weight: 4,
-                    opacity: 0.7,
-                    dashArray: '10, 10'
+                    opacity: 0.8,
+                    dashArray: '15, 15', // Larger dash pattern
+                    renderer: L.svg() // Force SVG renderer
                 }).addTo(map);
 
                 // Initialize completed path layer (will be updated as user moves)
@@ -1206,6 +1207,7 @@
                 document.getElementById('tourDistance').textContent = `${distanceMiles} mi`;
                 document.getElementById('tourDuration').textContent = `~${durationMinutes} min`;
                 document.getElementById('tourStats').classList.remove('hidden');
+                document.getElementById('tourStats').style.display = 'flex'; // Force display
 
                 // Hide loading overlay
                 loadingOverlay.classList.add('hidden');
@@ -1384,8 +1386,9 @@
                 tourPath = L.polyline(allRouteCoordinates, {
                     color: '#7c3aed',  // Purple color
                     weight: 4,
-                    opacity: 0.7,
-                    dashArray: '10, 10'
+                    opacity: 0.8,
+                    dashArray: '15, 15', // Larger dash pattern
+                    renderer: L.svg() // Force SVG renderer
                 }).addTo(map);
 
                 // Initialize completed path layer (will be updated as user moves)
@@ -1434,6 +1437,7 @@
 
             // Hide stats to show more map
             document.getElementById('tourStats').classList.add('hidden');
+            document.getElementById('tourStats').style.display = 'none'; // Force hide
 
             // Hide next button until close to destination
             const navBtn = document.getElementById('navActionButton');
@@ -1569,6 +1573,7 @@
 
             document.getElementById('navigationPanel').classList.add('translate-y-full', 'opacity-0');
             document.getElementById('tourStats').classList.add('hidden');
+            document.getElementById('tourStats').style.display = 'none'; // Force hide
 
             // RESET BUTTON TO START TOUR
             const tourBtn = document.getElementById('startTourButton');
