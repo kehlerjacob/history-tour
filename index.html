@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v2.7</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v2.8</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -217,30 +217,44 @@
     </header>
 
 
-    <!-- Tour Panel (Hidden by default) -->
-    <div id="tourPanel" class="hidden absolute top-[13rem] right-4 bg-white p-4 rounded-xl shadow-2xl z-[4900] w-72">
-        <h3 class="font-bold text-lg text-indigo-700 mb-3 flex justify-between items-center">
-            Configure Tour
-            <button onclick="document.getElementById('tourPanel').classList.add('hidden')"
-                class="text-gray-400 hover:text-gray-600">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
-                    </path>
-                </svg>
-            </button>
-        </h3>
-        <label for="tourDistance" class="block text-sm font-medium text-gray-700 mb-1">Max Tour Distance
-            (Miles):</label>
-        <div class="flex gap-2">
-            <input type="number" id="tourDistance" min="1" max="15" value="5" step="0.5"
-                class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5">
-            <button onclick="createTour(true)"
-                class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition flex-shrink-0"
-                id="tourConfigBtn">
-                Create
-            </button>
+    <!-- Tour Panel (Slide-up Card) -->
+    <div id="tourPanel" style="padding-bottom: calc(env(safe-area-inset-bottom, 20px) + 2rem);"
+        class="fixed inset-x-0 bottom-0 bg-white text-gray-800 p-4 sm:p-6 shadow-2xl rounded-t-3xl transition-all duration-300 transform translate-y-full opacity-0 z-[5000] min-h-[16rem] h-auto">
+        <div class="max-w-xl mx-auto flex flex-col h-full">
+
+            <!-- Header with Close Button -->
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-bold text-indigo-700">Configure Tour</h3>
+                <button onclick="closeTourPanel()" class="text-gray-400 hover:text-gray-600 transition">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Tour Distance Input -->
+            <div class="mb-4">
+                <label for="tourDistance" class="block text-sm font-semibold text-gray-700 mb-2">
+                    Max Tour Distance (Miles)
+                </label>
+                <input type="number" id="tourDistance" min="1" max="15" value="5" step="0.5"
+                    class="block w-full rounded-xl border-2 border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-lg p-3">
+            </div>
+
+            <!-- Status Text -->
+            <p id="tourStatus" class="text-sm text-gray-500 mb-4">Finds closest landmarks and optimizes for distance.
+            </p>
+
+            <!-- Create Tour Button -->
+            <div class="flex-grow flex items-end">
+                <button onclick="createTour(true); closeTourPanel();"
+                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition duration-200 shadow-lg"
+                    id="tourConfigBtn">
+                    Create Tour
+                </button>
+            </div>
         </div>
-        <p id="tourStatus" class="text-xs mt-2 text-gray-500">Finds closest pins and optimizes for distance.</p>
     </div>
 
     <!-- Map Container -->
@@ -758,8 +772,14 @@
         // --- TOUR CONFIGURATION & INITIAL ROUTE DRAWING (Unchanged) ---
 
         const openTourPanel = () => {
-            document.getElementById('tourPanel').classList.toggle('hidden');
-        }
+            const panel = document.getElementById('tourPanel');
+            panel.classList.remove('translate-y-full', 'opacity-0');
+        };
+
+        const closeTourPanel = () => {
+            const panel = document.getElementById('tourPanel');
+            panel.classList.add('translate-y-full', 'opacity-0');
+        };
 
         const fetchWikipediaLandmarks = async (lat, lon, keyword) => {
             if (isFetching) return;
