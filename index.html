@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.11</span>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.12</span>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -283,6 +283,43 @@
                     Create Custom Tour
                 </button>
             </div>
+        </div>
+    </div>
+
+    <!-- Knowledge Panel (Slide-up Card) -->
+    <div id="knowledgePanel" style="padding-bottom: calc(env(safe-area-inset-bottom, 20px) + 1rem);"
+        class="fixed inset-x-0 bottom-0 bg-white text-gray-800 p-4 sm:p-6 shadow-2xl rounded-t-3xl transition-all duration-300 transform translate-y-full opacity-0 z-[5001] max-h-[80vh] overflow-y-auto">
+        <div class="max-w-4xl mx-auto flex flex-col">
+
+            <!-- Header with Close Button -->
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-bold text-indigo-700" id="knowledgePanelTitle">Landmark Details</h3>
+                <button onclick="closeKnowledgePanel()" class="text-gray-400 hover:text-gray-600 transition">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Image -->
+            <div id="knowledgePanelImageContainer" class="mb-4 rounded-xl overflow-hidden bg-gray-100 hidden">
+                <img id="knowledgePanelImage" src="" alt="" class="w-full h-64 object-cover">
+            </div>
+
+            <!-- Construction Date -->
+            <p id="knowledgePanelDate" class="text-sm text-gray-500 mb-3 hidden"></p>
+
+            <!-- Description -->
+            <div id="knowledgePanelDescription" class="text-gray-700 mb-4 leading-relaxed">
+                <p>Loading...</p>
+            </div>
+
+            <!-- Wikipedia Link -->
+            <a id="knowledgePanelLink" href="#" target="_blank"
+                class="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition duration-200 shadow-lg text-center">
+                Read Full Article on Wikipedia
+            </a>
         </div>
     </div>
 
@@ -947,6 +984,56 @@
             panel.classList.add('translate-y-full', 'opacity-0');
         };
 
+        const openKnowledgePanel = (title, markerId) => {
+            // Find the landmark in tourPoints
+            const landmark = tourPoints.find(p => p.title === title);
+            if (!landmark) {
+                console.error("Landmark not found:", title);
+                return;
+            }
+
+            // Close tour panel if open
+            closeTourPanel();
+
+            // Populate panel
+            document.getElementById('knowledgePanelTitle').textContent = landmark.title;
+
+            // Image
+            const imageContainer = document.getElementById('knowledgePanelImageContainer');
+            const image = document.getElementById('knowledgePanelImage');
+            if (landmark.imageUrl) {
+                image.src = landmark.imageUrl;
+                image.alt = landmark.title;
+                imageContainer.classList.remove('hidden');
+            } else {
+                imageContainer.classList.add('hidden');
+            }
+
+            // Construction date
+            const dateElement = document.getElementById('knowledgePanelDate');
+            if (landmark.constructionDate) {
+                dateElement.textContent = landmark.constructionDate;
+                dateElement.classList.remove('hidden');
+            } else {
+                dateElement.classList.add('hidden');
+            }
+
+            // Description
+            document.getElementById('knowledgePanelDescription').innerHTML = `<p>${landmark.extract}</p>`;
+
+            // Wikipedia link
+            document.getElementById('knowledgePanelLink').href = landmark.fullUrl;
+
+            // Show panel
+            const panel = document.getElementById('knowledgePanel');
+            panel.classList.remove('translate-y-full', 'opacity-0');
+        };
+
+        const closeKnowledgePanel = () => {
+            const panel = document.getElementById('knowledgePanel');
+            panel.classList.add('translate-y-full', 'opacity-0');
+        };
+
         // Global state for custom tour
         let selectedLandmarks = [];
 
@@ -1340,9 +1427,32 @@
                     }
                 }
 
+                // Fetch descriptions and metadata for knowledge panel
+                let pageDetails = {};
+                if (pageIds) {
+                    const detailsApiUrl = `${WIKIPEDIA_API_URL}?action=query&prop=extracts|pageprops|info&exintro=1&explaintext=1&inprop=url&pageids=${pageIds}&format=json&origin=*`;
+
+                    try {
+                        const detailsData = await fetchWithRetry(detailsApiUrl);
+                        const pagesWithDetails = detailsData.query?.pages || {};
+
+                        Object.values(pagesWithDetails).forEach(p => {
+                            pageDetails[p.pageid] = {
+                                extract: p.extract || "No description available.",
+                                url: p.fullurl || `https://en.wikipedia.org/?curid=${p.pageid}`,
+                                // Try to extract construction date from pageprops
+                                constructionDate: p.pageprops?.['wikibase-shortdesc'] || null
+                            };
+                        });
+                    } catch (detailsError) {
+                        console.warn("Failed to fetch details:", detailsError);
+                    }
+                }
+
                 filteredPages.forEach(p => {
                     const imageUrl = pageImages[p.pageid] || null;
-                    pinLandmark(p.lat, p.lon, p.title, `https://en.wikipedia.org/?curid=${p.pageid}`, imageUrl);
+                    const details = pageDetails[p.pageid] || {};
+                    pinLandmark(p.lat, p.lon, p.title, `https://en.wikipedia.org/?curid=${p.pageid}`, imageUrl, details);
                 });
 
                 isFetching = false;
@@ -1355,7 +1465,7 @@
             }
         };
 
-        const pinLandmark = (lat, lon, title, url, imageUrl) => {
+        const pinLandmark = (lat, lon, title, url, imageUrl, details = {}) => {
             const marker = L.marker([lat, lon], { icon: landmarkIcon }).addTo(landmarkMarkers);
 
             let popupHtml = ``;
@@ -1366,14 +1476,26 @@
             }
 
             popupHtml += `
-                <div class="font-bold text-indigo-700">${title}</div>
-                <div class="text-sm mt-1">
-                    <a href="${url}" target="_blank" class="text-indigo-500 hover:text-indigo-700 underline">Read on Wikipedia</a>
-                </div>
+                <div class="font-bold text-indigo-700 mb-2">${title}</div>
+                <button onclick="openKnowledgePanel('${title.replace(/'/g, "\\'")}', ${marker._leaflet_id})" 
+                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-2 px-4 rounded-lg transition">
+                    Learn More
+                </button>
             `;
 
             marker.bindPopup(popupHtml);
-            tourPoints.push({ lat, lon, title, isWiki: true, url, marker, imageUrl });
+            tourPoints.push({
+                lat,
+                lon,
+                title,
+                isWiki: true,
+                url,
+                marker,
+                imageUrl,
+                extract: details.extract || "No description available.",
+                constructionDate: details.constructionDate || null,
+                fullUrl: details.url || url
+            });
         };
 
         const fetchAndPinLandmarks = () => {
