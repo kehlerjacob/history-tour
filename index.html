@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.4</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.5</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -1258,15 +1258,25 @@
             // Increased limit to 500 as requested
             let url = `${WIKIPEDIA_API_URL}?action=query&list=geosearch&gsradius=${radiusMeters}&gscoord=${lat}|${lon}&gslimit=500&format=json&origin=*`;
 
+            console.log("Fetching URL:", url);
+
             try {
                 const data = await fetchWithRetry(url);
                 const pages = data.query?.geosearch || [];
+                console.log("Raw pages found:", pages.length);
 
                 // Strict filtering for "statue", "house", or "building"
                 const filteredPages = pages.filter(p => {
                     const title = p.title.toLowerCase();
                     return title.includes('statue') || title.includes('house') || title.includes('building');
                 });
+
+                console.log("Filtered pages:", filteredPages.length);
+
+                if (filteredPages.length === 0) {
+                    // Alert the user if strict filtering removed everything
+                    alert(`Debug: Found ${pages.length} raw results, but 0 matched 'statue', 'house', or 'building'. Try moving the map.`);
+                }
 
                 filteredPages.forEach(p => {
                     pinLandmark(p.lat, p.lon, p.title, `https://en.wikipedia.org/?curid=${p.pageid}`);
