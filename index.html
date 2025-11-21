@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v4.3</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v4.4</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -1166,25 +1166,30 @@
                 if (window.completedPath) map.removeLayer(window.completedPath);
                 window.completedPath = null;
 
+                // Initialize distance markers array
+                if (!window.distanceMarkers) window.distanceMarkers = [];
+
                 // Add distance labels for each segment
                 segmentData.forEach((segment, index) => {
                     const distanceMiles = (segment.distance / 1609.34).toFixed(1);
                     const midpoint = segment.midpoint;
 
                     if (midpoint) {
-                        L.marker([midpoint[0], midpoint[1]], {
+                        const marker = L.marker([midpoint[0], midpoint[1]], {
                             icon: L.divIcon({
                                 className: 'distance-label',
-                                html: `<div style="background: white; padding: 4px 8px; border-radius: 12px; border: 2px solid #4f46e5; font-size: 11px; font-weight: bold; color: #4f46e5; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">${distanceMiles} mi</div>`,
+                                html: `<div style="background: white; padding: 4px 8px; border-radius: 12px; border: 2px solid #7c3aed; font-size: 11px; font-weight: bold; color: #7c3aed; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">${distanceMiles} mi</div>`,
                                 iconSize: [60, 24]
                             })
                         }).addTo(map);
+                        window.distanceMarkers.push(marker);
                     }
                 });
 
                 // Display total distance and duration in navigation panel
+                // Walking speed: 2.5 mph = 0.04167 miles per minute = 24 minutes per mile
                 const distanceMiles = (totalDistance / 1609.34).toFixed(1);
-                const durationMinutes = Math.round(totalDuration / 60);
+                const durationMinutes = Math.round((totalDistance / 1609.34) * 24); // 24 min per mile at 2.5mph
 
                 document.getElementById('tourDistance').textContent = `${distanceMiles} mi`;
                 document.getElementById('tourDuration').textContent = `~${durationMinutes} min`;
@@ -1370,8 +1375,9 @@
                 window.completedPath = null;
 
                 // Display total distance and duration in navigation panel
+                // Walking speed: 2.5 mph = 24 minutes per mile
                 const distanceMiles = (totalDistance / 1609.34).toFixed(1);
-                const durationMinutes = Math.round(totalDuration / 60);
+                const durationMinutes = Math.round((totalDistance / 1609.34) * 24); // 24 min per mile at 2.5mph
 
                 document.getElementById('tourDistance').textContent = `${distanceMiles} mi`;
                 document.getElementById('tourDuration').textContent = `~${durationMinutes} min`;
@@ -1423,7 +1429,7 @@
 
                 // Draw the detailed OSRM route
                 tourPath = L.polyline(routeData.path, {
-                    color: '#16a34a',
+                    color: '#7c3aed',  // Purple to match preview
                     weight: 6,
                     opacity: 0.9,
                     lineJoin: 'round'
@@ -1519,9 +1525,16 @@
         }
 
         const endTour = () => {
-            // End Tour logic
+            // End Tour logic - remove all route layers
             if (tourPath) map.removeLayer(tourPath);
             if (window.completedPath) map.removeLayer(window.completedPath);
+
+            // Remove all distance label markers
+            if (window.distanceMarkers && window.distanceMarkers.length > 0) {
+                window.distanceMarkers.forEach(marker => map.removeLayer(marker));
+                window.distanceMarkers = [];
+            }
+
             tourRoute = null;
             currentTourStep = 0;
             currentManeuverIndex = -1;
