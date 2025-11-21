@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.8</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.9</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -1259,9 +1259,11 @@
             let allPages = [];
             let continueToken = null;
             let fetchCount = 0;
-            const MAX_FETCHES = 5; // Fetch up to 2500 raw results (5 * 500)
+            const MAX_FETCHES = 20; // Fetch up to 10,000 raw results (20 * 500) to simulate "filtering before limit"
 
             try {
+                document.getElementById('tourStatus').textContent = "Scanning deep into the archives...";
+
                 do {
                     let url = `${WIKIPEDIA_API_URL}?action=query&list=geosearch&gsradius=${radiusMeters}&gscoord=${lat}|${lon}&gslimit=500&format=json&origin=*`;
 
@@ -1270,6 +1272,11 @@
                         for (const key in continueToken) {
                             url += `&${key}=${encodeURIComponent(continueToken[key])}`;
                         }
+                    }
+
+                    // Update UI to show progress
+                    if (fetchCount > 0) {
+                        document.getElementById('tourStatus').textContent = `Scanning area... (Found ${allPages.length} items so far)`;
                     }
 
                     console.log(`Fetching batch ${fetchCount + 1}:`, url);
@@ -1300,7 +1307,7 @@
                 console.log("Filtered pages:", filteredPages.length);
 
                 if (filteredPages.length === 0) {
-                    alert(`Debug: Found ${allPages.length} raw results, but 0 matched 'statue', 'house', or 'building'. Try moving the map.`);
+                    alert(`Debug: Scanned ${allPages.length} raw items, but 0 matched 'statue', 'house', or 'building'. Try moving the map.`);
                 }
 
                 filteredPages.forEach(p => {
@@ -1308,7 +1315,7 @@
                 });
 
                 isFetching = false;
-                document.getElementById('tourStatus').textContent = `Found ${filteredPages.length} landmarks.`;
+                document.getElementById('tourStatus').textContent = `Found ${filteredPages.length} landmarks (scanned ${allPages.length} locations).`;
 
             } catch (error) {
                 console.error("Wikipedia GeoSearch Error:", error);
