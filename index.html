@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v3.1</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v3.2</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -875,34 +875,20 @@
             const userLat = refLatLong.lat;
             const userLon = refLatLong.lng;
 
-            // Get most recently selected landmark (if any)
-            const lastSelected = selectedLandmarks.length > 0 ? selectedLandmarks[selectedLandmarks.length - 1] : null;
-
             // Filter landmarks within 5 mile radius and calculate distances
             const FIVE_MILES_IN_METERS = 5 * 1609.34;
             const landmarksWithDistance = tourPoints.map(point => {
                 const distanceFromUser = getDistance(userLat, userLon, point.lat, point.lon);
-                const distanceFromLast = lastSelected
-                    ? getDistance(lastSelected.lat, lastSelected.lon, point.lat, point.lon)
-                    : Infinity;
 
                 return {
                     ...point,
-                    distanceFromUser,
-                    distanceFromLast
+                    distanceFromUser
                 };
             }).filter(point => point.distanceFromUser <= FIVE_MILES_IN_METERS);
 
-            // Sort: If no selections yet, sort by distance from user
-            // If selections exist, sort by distance from most recent selection
+            // Sort by proximity to current location
             const sortedLandmarks = landmarksWithDistance.sort((a, b) => {
-                if (selectedLandmarks.length === 0) {
-                    // No selections yet - sort by proximity to user
-                    return a.distanceFromUser - b.distanceFromUser;
-                } else {
-                    // Has selections - sort by proximity to most recent selection
-                    return a.distanceFromLast - b.distanceFromLast;
-                }
+                return a.distanceFromUser - b.distanceFromUser;
             });
 
             container.innerHTML = '';
