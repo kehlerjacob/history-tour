@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v4.1</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v4.2</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -827,8 +827,64 @@
             `;
             // --- END MODIFICATION ---
 
+            // Update progressive route tracking
+            if (window.fullRouteCoordinates && window.fullRouteCoordinates.length > 0) {
+                updateProgressiveRoute(newLatLong);
+            }
+
             // Handle tour progression and instruction updates
             checkTourProgress(newLatLong);
+        };
+
+        // Function to update the progressive route as user moves
+        const updateProgressiveRoute = (userLatLng) => {
+            if (!window.fullRouteCoordinates || window.fullRouteCoordinates.length === 0) return;
+
+            // Find the closest point on the route to the user
+            let closestIndex = 0;
+            let minDistance = Infinity;
+
+            window.fullRouteCoordinates.forEach((coord, index) => {
+                const dist = getDistance(userLatLng[0], userLatLng[1], coord[0], coord[1]);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closestIndex = index;
+                }
+            });
+
+            // Only update if user is reasonably close to the route (within 50 meters)
+            if (minDistance > 50) return;
+
+            // Get completed portion of the route (from start to user's position)
+            const completedCoords = window.fullRouteCoordinates.slice(0, closestIndex + 1);
+            const remainingCoords = window.fullRouteCoordinates.slice(closestIndex);
+
+            // Remove old completed path
+            if (window.completedPath) {
+                map.removeLayer(window.completedPath);
+            }
+
+            // Draw completed portion as thinner dotted line
+            if (completedCoords.length > 1) {
+                window.completedPath = L.polyline(completedCoords, {
+                    color: '#7c3aed',  // Same purple
+                    weight: 2,  // Thinner
+                    opacity: 0.5,
+                    dashArray: '5, 5'  // Dotted
+                }).addTo(map);
+            }
+
+            // Update main route to show only remaining portion
+            if (tourPath) {
+                map.removeLayer(tourPath);
+            }
+            if (remainingCoords.length > 1) {
+                tourPath = L.polyline(remainingCoords, {
+                    color: '#7c3aed',  // Purple
+                    weight: 4,  // Solid thick
+                    opacity: 0.9
+                }).addTo(map);
+            }
         };
 
         const watchPositionError = (error) => {
@@ -1073,7 +1129,11 @@
                 console.log(`Route fetching complete: ${successfulRoutes}/${tourRoute.length - 1} successful`);
                 console.log(`Total coordinates: ${allRouteCoordinates.length}`);
 
-                // Draw the complete walking route as a dashed line
+                // Store the full route coordinates globally for progressive tracking
+                window.fullRouteCoordinates = allRouteCoordinates;
+                window.completedRouteCoordinates = [];
+
+                // Draw the complete walking route as a dashed line (preview mode)
                 if (tourPath) map.removeLayer(tourPath);
                 tourPath = L.polyline(allRouteCoordinates, {
                     color: '#4f46e5',
@@ -1082,33 +1142,9 @@
                     dashArray: '10, 5'
                 }).addTo(map);
 
-                // Add directional arrows to the route
-                const arrowIcon = L.divIcon({
-                    className: 'arrow-icon',
-                    html: '<div style="color: #4f46e5; font-size: 20px; transform: rotate(0deg);">➤</div>',
-                    iconSize: [20, 20]
-                });
-
-                // Add arrows every ~20% along the route
-                const totalPoints = allRouteCoordinates.length;
-                for (let i = 0; i < 5; i++) {
-                    const index = Math.floor((totalPoints / 5) * i);
-                    if (index < totalPoints - 1) {
-                        const point1 = allRouteCoordinates[index];
-                        const point2 = allRouteCoordinates[index + 1];
-
-                        // Calculate rotation angle
-                        const angle = Math.atan2(point2[0] - point1[0], point2[1] - point1[1]) * (180 / Math.PI);
-
-                        L.marker([point1[0], point1[1]], {
-                            icon: L.divIcon({
-                                className: 'arrow-icon',
-                                html: `<div style="color: #4f46e5; font-size: 20px; transform: rotate(${angle}deg);">➤</div>`,
-                                iconSize: [20, 20]
-                            })
-                        }).addTo(map);
-                    }
-                }
+                // Initialize completed path layer (will be updated as user moves)
+                if (window.completedPath) map.removeLayer(window.completedPath);
+                window.completedPath = null;
 
                 // Add distance labels for each segment
                 segmentData.forEach((segment, index) => {
@@ -1295,14 +1331,22 @@
                 console.log(`Route fetching complete: ${successfulRoutes}/${tourRoute.length - 1} successful`);
                 console.log(`Total coordinates: ${allRouteCoordinates.length}`);
 
-                // Draw the complete walking route as a dashed line
+                // Store the full route coordinates globally for progressive tracking
+                window.fullRouteCoordinates = allRouteCoordinates;
+                window.completedRouteCoordinates = [];
+
+                // Draw the complete walking route as a dashed line (preview mode)
                 if (tourPath) map.removeLayer(tourPath);
                 tourPath = L.polyline(allRouteCoordinates, {
-                    color: '#84cc16',
+                    color: '#7c3aed',  // Purple color
                     weight: 4,
                     opacity: 0.7,
                     dashArray: '10, 10'
                 }).addTo(map);
+
+                // Initialize completed path layer (will be updated as user moves)
+                if (window.completedPath) map.removeLayer(window.completedPath);
+                window.completedPath = null;
 
                 // Display total distance and duration
                 const distanceMiles = (totalDistance / 1609.34).toFixed(1);
