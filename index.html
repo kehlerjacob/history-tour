@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v3.7</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v3.9</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -255,7 +255,7 @@
                         class="block w-full rounded-xl border-2 border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-lg p-3">
                 </div>
                 <p class="text-sm text-gray-500 mb-4">Finds closest landmarks and optimizes for distance.</p>
-                <button onclick="handleCreateTour()"
+                <button onclick="alert('Button clicked!'); handleCreateTour();"
                     class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition duration-200 shadow-lg">
                     Create Tour
                 </button>
@@ -571,14 +571,21 @@
             // Request polyline geometry AND steps
             const url = `${OSRM_API_URL}${coordinates}?geometries=polyline&steps=true&overview=full`;
 
+            console.log(`Fetching route from OSRM: ${url}`);
+
             try {
                 const data = await fetchWithRetry(url);
+                console.log("OSRM response received:", data);
+
                 if (data.routes && data.routes.length > 0) {
                     const route = data.routes[0];
                     const leg = route.legs[0];
 
                     const polylineString = route.geometry;
+                    console.log("Polyline string:", polylineString);
+
                     const decodedPath = polyline.decode(polylineString);
+                    console.log("Decoded path length:", decodedPath.length);
 
                     return {
                         path: decodedPath,
@@ -587,6 +594,7 @@
                         steps: leg.steps // The turn-by-turn instructions
                     };
                 } else {
+                    console.error("No routes in OSRM response");
                     throw new Error("No route found by OSRM.");
                 }
             } catch (error) {
