@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v4.4</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v4.5</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -1414,8 +1414,14 @@
             // Use current user location as the actual start of the segment
             const currentStart = { lat: userLatLong.lat, lon: userLatLong.lng };
 
-            document.getElementById('navActionButton').textContent = "Calculating Route...";
-            document.getElementById('navActionButton').disabled = true;
+            // Hide stats to show more map
+            document.getElementById('tourStats').classList.add('hidden');
+
+            // Hide next button until close to destination
+            const navBtn = document.getElementById('navActionButton');
+            navBtn.textContent = "Calculating Route...";
+            navBtn.disabled = true;
+            navBtn.classList.add('hidden');
 
             const routeData = await fetchWalkingRoute(currentStart.lat, currentStart.lon, endPoint.lat, endPoint.lon);
 
@@ -1485,8 +1491,10 @@
                 const nextStop = tourRoute[1];
                 document.getElementById('currentNavInstruction').textContent = "Tour Ready: Conceptual Route";
                 document.getElementById('nextLandmarkInfo').innerHTML = `The dashed line shows the approximate path. Press <span class="font-bold">'Start Navigation'</span> to get the walking route to: <span class="font-bold">${nextStop.title}</span>.`;
-                document.getElementById('navActionButton').textContent = "Start Navigation";
-                document.getElementById('navActionButton').disabled = false;
+                const navBtn = document.getElementById('navActionButton');
+                navBtn.textContent = "Start Navigation";
+                navBtn.disabled = false;
+                navBtn.classList.remove('hidden');
 
             } else if (currentTourStep < tourRoute.length) {
                 // Mid-tour steps - Trigger detailed route fetch
@@ -1567,11 +1575,13 @@
             const userLon = userLatLong[1];
 
             const distanceToDestination = getDistance(userLat, userLon, target.lat, target.lon);
-            const arrivalThreshold = 50; // 50 meters
+            const arrivalThreshold = 30; // 30 meters ≈ 100 feet
 
             // --- 1. Check for Destination Arrival ---
             if (distanceToDestination < arrivalThreshold) {
-                document.getElementById('navActionButton').disabled = false;
+                const navBtn = document.getElementById('navActionButton');
+                navBtn.classList.remove('hidden');
+                navBtn.disabled = false;
                 document.getElementById('currentNavInstruction').innerHTML = `<span class="text-yellow-200 font-bold">ARRIVED:</span> ${target.title}`;
                 document.getElementById('nextLandmarkInfo').textContent = `You have reached this location. Press 'Next Stop' to continue the tour.`;
                 return;
