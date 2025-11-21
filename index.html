@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v4.9</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.0</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -1320,6 +1320,38 @@
             await createTour(true);
         };
 
+        /**
+         * Optimizes the order of stops using a Nearest Neighbor algorithm.
+         * @param {Object} start - The starting point {lat, lon}
+         * @param {Array} stops - Array of stop objects {lat, lon, ...}
+         * @returns {Array} - Reordered array of stops
+         */
+        const optimizeRouteOrder = (start, stops) => {
+            const unvisited = [...stops];
+            const optimized = [];
+            let currentLocation = start;
+
+            while (unvisited.length > 0) {
+                let nearestIndex = -1;
+                let minDist = Infinity;
+
+                for (let i = 0; i < unvisited.length; i++) {
+                    const dist = getDistance(currentLocation.lat, currentLocation.lon, unvisited[i].lat, unvisited[i].lon);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        nearestIndex = i;
+                    }
+                }
+
+                if (nearestIndex !== -1) {
+                    const nextStop = unvisited.splice(nearestIndex, 1)[0];
+                    optimized.push(nextStop);
+                    currentLocation = nextStop;
+                }
+            }
+            return optimized;
+        };
+
         const createTour = async (reset = false) => {
             console.log("createTour function started");
             const maxDistanceMiles = parseFloat(document.getElementById('tourDistance').value);
@@ -1357,9 +1389,13 @@
 
             potentialStops.sort((a, b) => a.distance - b.distance);
 
-            // Create the route: Start -> Closest Stops -> Return to Start
+            // Optimize the order of the top 5 closest stops
+            const topStops = potentialStops.slice(0, 5);
+            const optimizedStops = optimizeRouteOrder(startPoint, topStops);
+
+            // Create the route: Start -> Optimized Stops -> Return to Start
             const returnToStart = { ...startPoint, title: "Return to Start" };
-            tourRoute = [startPoint, ...potentialStops.slice(0, 5), returnToStart];
+            tourRoute = [startPoint, ...optimizedStops, returnToStart];
             currentTourStep = 0;
             currentManeuverIndex = -1;
 
