@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v4.0</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v4.1</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -255,7 +255,7 @@
                         class="block w-full rounded-xl border-2 border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-lg p-3">
                 </div>
                 <p class="text-sm text-gray-500 mb-4">Finds closest landmarks and optimizes for distance.</p>
-                <button onclick="alert('Button clicked!'); handleCreateTour();"
+                <button onclick="handleCreateTour()"
                     class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition duration-200 shadow-lg">
                     Create Tour
                 </button>
@@ -312,6 +312,24 @@
     <!-- Map Container -->
     <div id="map" class="w-full bg-gray-200"
         style="position: fixed !important; top: 150px; left: 0; right: 0; bottom: 0; z-index: 1 !important;"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay"
+        class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-[9000] flex items-center justify-center">
+        <div class="bg-white rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4 max-w-sm mx-4">
+            <div class="relative w-16 h-16">
+                <div class="absolute inset-0 border-4 border-indigo-200 rounded-full"></div>
+                <div class="absolute inset-0 border-4 border-indigo-600 rounded-full border-t-transparent animate-spin">
+                </div>
+            </div>
+            <h3 class="text-xl font-bold text-gray-800">Generating Route</h3>
+            <p id="loadingText" class="text-sm text-gray-600 text-center">Calculating optimal walking paths...</p>
+            <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                <div id="loadingProgress" class="bg-indigo-600 h-full transition-all duration-300" style="width: 0%">
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Location Status Bubble (REPOSITIONED & Compacted) -->
     <div id="locationStatus"
@@ -989,6 +1007,12 @@
             }
 
             try {
+                // Show loading overlay
+                const loadingOverlay = document.getElementById('loadingOverlay');
+                const loadingText = document.getElementById('loadingText');
+                const loadingProgress = document.getElementById('loadingProgress');
+                loadingOverlay.classList.remove('hidden');
+
                 const refLatLong = userMarker ? userMarker.getLatLng() : map.getCenter();
 
                 const startPoint = {
@@ -1002,11 +1026,9 @@
                 tourRoute = [startPoint, ...selectedLandmarks, startPoint];
                 currentTourStep = 0;
 
-                // Show loading message
-                document.getElementById('tourStatus').textContent = 'Calculating walking routes...';
-
                 // Fetch actual walking routes for all segments
                 const allRouteCoordinates = [];
+                const segmentData = []; // Store data for each segment
                 let totalDistance = 0;
                 let totalDuration = 0;
                 let successfulRoutes = 0;
@@ -1017,13 +1039,27 @@
                     const start = tourRoute[i];
                     const end = tourRoute[i + 1];
 
+                    // Update loading text and progress
+                    loadingText.textContent = `Fetching route ${i + 1} of ${tourRoute.length - 1}...`;
+                    loadingProgress.style.width = `${((i + 1) / (tourRoute.length - 1)) * 100}%`;
+
                     console.log(`Fetching route ${i + 1}/${tourRoute.length - 1}: ${start.title} -> ${end.title}`);
                     const routeData = await fetchWalkingRoute(start.lat, start.lon, end.lat, end.lon);
 
                     if (routeData && routeData.path && routeData.path.length > 0) {
                         // Add the route coordinates
                         console.log(`✓ Route ${i + 1} fetched: ${routeData.path.length} points, ${(routeData.distance / 1609.34).toFixed(2)} mi`);
+
+                        const segmentStart = allRouteCoordinates.length;
                         allRouteCoordinates.push(...routeData.path);
+
+                        segmentData.push({
+                            start: segmentStart,
+                            end: allRouteCoordinates.length - 1,
+                            distance: routeData.distance,
+                            midpoint: routeData.path[Math.floor(routeData.path.length / 2)]
+                        });
+
                         totalDistance += routeData.distance;
                         totalDuration += routeData.duration;
                         successfulRoutes++;
@@ -1046,10 +1082,57 @@
                     dashArray: '10, 5'
                 }).addTo(map);
 
+                // Add directional arrows to the route
+                const arrowIcon = L.divIcon({
+                    className: 'arrow-icon',
+                    html: '<div style="color: #4f46e5; font-size: 20px; transform: rotate(0deg);">➤</div>',
+                    iconSize: [20, 20]
+                });
+
+                // Add arrows every ~20% along the route
+                const totalPoints = allRouteCoordinates.length;
+                for (let i = 0; i < 5; i++) {
+                    const index = Math.floor((totalPoints / 5) * i);
+                    if (index < totalPoints - 1) {
+                        const point1 = allRouteCoordinates[index];
+                        const point2 = allRouteCoordinates[index + 1];
+
+                        // Calculate rotation angle
+                        const angle = Math.atan2(point2[0] - point1[0], point2[1] - point1[1]) * (180 / Math.PI);
+
+                        L.marker([point1[0], point1[1]], {
+                            icon: L.divIcon({
+                                className: 'arrow-icon',
+                                html: `<div style="color: #4f46e5; font-size: 20px; transform: rotate(${angle}deg);">➤</div>`,
+                                iconSize: [20, 20]
+                            })
+                        }).addTo(map);
+                    }
+                }
+
+                // Add distance labels for each segment
+                segmentData.forEach((segment, index) => {
+                    const distanceMiles = (segment.distance / 1609.34).toFixed(1);
+                    const midpoint = segment.midpoint;
+
+                    if (midpoint) {
+                        L.marker([midpoint[0], midpoint[1]], {
+                            icon: L.divIcon({
+                                className: 'distance-label',
+                                html: `<div style="background: white; padding: 4px 8px; border-radius: 12px; border: 2px solid #4f46e5; font-size: 11px; font-weight: bold; color: #4f46e5; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">${distanceMiles} mi</div>`,
+                                iconSize: [60, 24]
+                            })
+                        }).addTo(map);
+                    }
+                });
+
                 // Display total distance and duration
                 const distanceMiles = (totalDistance / 1609.34).toFixed(1);
                 const durationMinutes = Math.round(totalDuration / 60);
                 document.getElementById('tourStatus').textContent = `Tour ready: ${distanceMiles} mi, ~${durationMinutes} min walking`;
+
+                // Hide loading overlay
+                loadingOverlay.classList.add('hidden');
 
                 document.getElementById('navigationPanel').classList.remove('translate-y-full', 'opacity-0');
 
@@ -1066,6 +1149,7 @@
                 showMessage("Custom Tour Created", `Your tour includes ${selectedLandmarks.length} stops! Total: ${distanceMiles} mi, ~${durationMinutes} min`);
             } catch (e) {
                 console.error("Create Custom Tour Error:", e);
+                document.getElementById('loadingOverlay').classList.add('hidden');
                 showMessage("Tour Error", "Failed to create custom tour: " + e.message);
             }
         };
