@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v4.7</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v4.8</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -1204,6 +1204,10 @@
                 const distanceMiles = (totalDistance / 1609.34).toFixed(1);
                 const durationMinutes = Math.round((totalDistance / 1609.34) * 24); // 24 min per mile at 2.5mph
 
+                if (totalDistance === 0) {
+                    alert(`Debug: Total Distance is 0! Routes: ${successfulRoutes}/${tourRoute.length - 1}. Start: ${startPoint.lat},${startPoint.lon}`);
+                }
+
                 document.getElementById('tourDistance').textContent = `${distanceMiles} mi`;
                 document.getElementById('tourDuration').textContent = `~${durationMinutes} min`;
                 document.getElementById('tourStats').classList.remove('hidden');
@@ -1400,9 +1404,14 @@
                 const distanceMiles = (totalDistance / 1609.34).toFixed(1);
                 const durationMinutes = Math.round((totalDistance / 1609.34) * 24); // 24 min per mile at 2.5mph
 
+                if (totalDistance === 0) {
+                    alert(`Debug: Total Distance is 0! Routes: ${successfulRoutes}/${tourRoute.length - 1}. Start: ${startPoint.lat},${startPoint.lon}`);
+                }
+
                 document.getElementById('tourDistance').textContent = `${distanceMiles} mi`;
                 document.getElementById('tourDuration').textContent = `~${durationMinutes} min`;
                 document.getElementById('tourStats').classList.remove('hidden');
+                document.getElementById('tourStats').style.display = 'flex'; // Force display
 
                 document.getElementById('navigationPanel').classList.remove('translate-y-full', 'opacity-0');
 
