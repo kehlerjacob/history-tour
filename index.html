@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v2.4</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v2.5</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -741,13 +741,17 @@
         const watchPositionError = (error) => {
             console.error('Geolocation error:', error);
 
-            let message = "Geolocation Error. Check permissions.";
+            let message = "Searching for GPS...";
+
             if (error.code === error.PERMISSION_DENIED) {
-                message = "Permission denied. Location marker may not appear.";
+                message = "Location permission denied";
+            } else if (error.code === error.POSITION_UNAVAILABLE) {
+                message = "Location unavailable";
             }
+            // Code 3 (TIMEOUT) is handled silently - just keep showing "Searching for GPS..."
 
             document.getElementById('locationStatusText').textContent = message;
-            showMessage("GPS Error", `Error Code ${error.code}: ${error.message}`);
+            // Removed popup - errors are now only shown in status bubble
         };
 
 
