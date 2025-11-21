@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.1</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.2</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -909,25 +909,20 @@
             }
 
             // Draw completed portion as thinner dotted line
-            if (completedCoords.length > 1) {
-                window.completedPath = L.polyline(completedCoords, {
-                    color: '#7c3aed',  // Same purple
-                    weight: 2,  // Thinner
-                    opacity: 0.5,
-                    dashArray: '5, 5'  // Dotted
-                }).addTo(map);
-            }
+            // Draw completed path as a thinner, dotted line
+            window.completedPath = L.polyline(completedCoords, {
+                color: '#7c3aed',
+                weight: 3,
+                opacity: 0.5,
+                dashArray: '5, 10'
+            }).addTo(map);
 
-            // Update main route to show only remaining portion
+            // We NO LONGER draw the remaining route here.
+            // The active segment is handled by initiateRoute(), and we don't want to show future segments.
             if (tourPath) {
-                map.removeLayer(tourPath);
-            }
-            if (remainingCoords.length > 1) {
-                tourPath = L.polyline(remainingCoords, {
-                    color: '#7c3aed',  // Purple
-                    weight: 4,  // Solid thick
-                    opacity: 0.9
-                }).addTo(map);
+                // If tourPath is the full preview (from createTour), we might want to remove it once navigation starts.
+                // However, initiateRoute replaces tourPath with the segment route.
+                // So we just don't overwrite tourPath here with the full remaining route.
             }
         };
 
@@ -1101,8 +1096,8 @@
         const createCustomTour = async () => {
             console.log("createCustomTour function started");
 
-            if (selectedLandmarks.length < 2) {
-                showMessage("Not Enough Stops", "Please select at least 2 landmarks for your custom tour.");
+            if (selectedLandmarks.length < 1) {
+                showMessage("Not Enough Stops", "Please select at least 1 landmark for your custom tour.");
                 return;
             }
 
@@ -1268,19 +1263,21 @@
             landmarkMarkers.clearLayers();
             tourPoints = [];
 
-            // Use the fixed radius (5km) for the API call
-            const radiusMeters = FIXED_SEARCH_RADIUS_KM * 1000;
+            // Use 5 miles (approx 8046 meters) for the API call
+            const radiusMeters = 8046;
 
-            let url = `${WIKIPEDIA_API_URL}?action=query&list=geosearch&gsradius=${radiusMeters}&gscoord=${lat}|${lon}&gslimit=50&format=json&origin=*`;
+            // Increased limit to 500 as requested
+            let url = `${WIKIPEDIA_API_URL}?action=query&list=geosearch&gsradius=${radiusMeters}&gscoord=${lat}|${lon}&gslimit=500&format=json&origin=*`;
 
             try {
                 const data = await fetchWithRetry(url);
                 const pages = data.query?.geosearch || [];
 
-                // Optional keyword filtering (applied client-side)
-                const filteredPages = keyword
-                    ? pages.filter(p => p.title.toLowerCase().includes(keyword.toLowerCase()))
-                    : pages;
+                // Strict filtering for "statue", "house", or "building"
+                const filteredPages = pages.filter(p => {
+                    const title = p.title.toLowerCase();
+                    return title.includes('statue') || title.includes('house') || title.includes('building');
+                });
 
                 filteredPages.forEach(p => {
                     pinLandmark(p.lat, p.lon, p.title, `https://en.wikipedia.org/?curid=${p.pageid}`);
