@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v2.8</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v3.0</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -217,10 +217,10 @@
     </header>
 
 
-    <!-- Tour Panel (Slide-up Card) -->
+    <!-- Tour Panel (Slide-up Card with Tabs) -->
     <div id="tourPanel" style="padding-bottom: calc(env(safe-area-inset-bottom, 20px) + 2rem);"
-        class="fixed inset-x-0 bottom-0 bg-white text-gray-800 p-4 sm:p-6 shadow-2xl rounded-t-3xl transition-all duration-300 transform translate-y-full opacity-0 z-[5000] min-h-[16rem] h-auto">
-        <div class="max-w-xl mx-auto flex flex-col h-full">
+        class="fixed inset-x-0 bottom-0 bg-white text-gray-800 p-4 sm:p-6 shadow-2xl rounded-t-3xl transition-all duration-300 transform translate-y-full opacity-0 z-[5000] max-h-[80vh] overflow-y-auto">
+        <div class="max-w-4xl mx-auto flex flex-col">
 
             <!-- Header with Close Button -->
             <div class="flex justify-between items-center mb-4">
@@ -233,29 +233,81 @@
                 </button>
             </div>
 
-            <!-- Tour Distance Input -->
-            <div class="mb-4">
-                <label for="tourDistance" class="block text-sm font-semibold text-gray-700 mb-2">
-                    Max Tour Distance (Miles)
-                </label>
-                <input type="number" id="tourDistance" min="1" max="15" value="5" step="0.5"
-                    class="block w-full rounded-xl border-2 border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-lg p-3">
+            <!-- Tab Navigation -->
+            <div class="flex gap-2 mb-4 border-b border-gray-200">
+                <button id="distanceTabBtn" onclick="switchTourTab('distance')"
+                    class="px-4 py-2 font-semibold text-indigo-600 border-b-2 border-indigo-600 transition">
+                    Distance-Based
+                </button>
+                <button id="customTabBtn" onclick="switchTourTab('custom')"
+                    class="px-4 py-2 font-semibold text-gray-500 border-b-2 border-transparent hover:text-indigo-600 transition">
+                    Custom Tour
+                </button>
             </div>
 
-            <!-- Status Text -->
-            <p id="tourStatus" class="text-sm text-gray-500 mb-4">Finds closest landmarks and optimizes for distance.
-            </p>
-
-            <!-- Create Tour Button -->
-            <div class="flex-grow flex items-end">
+            <!-- Distance-Based Tour Tab -->
+            <div id="distanceTab" class="tour-tab">
+                <div class="mb-4">
+                    <label for="tourDistance" class="block text-sm font-semibold text-gray-700 mb-2">
+                        Max Tour Distance (Miles)
+                    </label>
+                    <input type="number" id="tourDistance" min="1" max="15" value="5" step="0.5"
+                        class="block w-full rounded-xl border-2 border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-lg p-3">
+                </div>
+                <p class="text-sm text-gray-500 mb-4">Finds closest landmarks and optimizes for distance.</p>
                 <button onclick="createTour(true); closeTourPanel();"
-                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition duration-200 shadow-lg"
-                    id="tourConfigBtn">
+                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition duration-200 shadow-lg">
                     Create Tour
+                </button>
+            </div>
+
+            <!-- Custom Tour Tab -->
+            <div id="customTab" class="tour-tab hidden">
+                <p class="text-sm text-gray-600 mb-3">Select landmarks to visit (tap cards to add/remove):</p>
+
+                <!-- Selected Count -->
+                <div class="mb-3 flex items-center gap-2">
+                    <span class="text-sm font-semibold text-indigo-600">Selected: <span
+                            id="selectedCount">0</span></span>
+                    <button onclick="clearSelectedLandmarks()"
+                        class="text-xs text-red-500 hover:text-red-700 underline">Clear All</button>
+                </div>
+
+                <!-- Horizontal Scrollable Landmark Cards -->
+                <div id="landmarkCardsContainer"
+                    class="flex gap-3 overflow-x-auto pb-4 mb-4 snap-x snap-mandatory scrollbar-hide">
+                    <!-- Cards will be dynamically inserted here -->
+                    <div class="text-center text-gray-400 py-8 w-full">
+                        <p>Loading landmarks...</p>
+                    </div>
+                </div>
+
+                <!-- Status Text -->
+                <p id="tourStatus" class="text-sm text-gray-500 mb-4">Creates an optimized route through your selected
+                    stops.</p>
+
+                <!-- Create Custom Tour Button -->
+                <button onclick="createCustomTour(); closeTourPanel();"
+                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition duration-200 shadow-lg disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    id="createCustomTourBtn" disabled>
+                    Create Custom Tour
                 </button>
             </div>
         </div>
     </div>
+
+    <style>
+        /* Hide scrollbar for Chrome, Safari and Opera */
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* Hide scrollbar for IE, Edge and Firefox */
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
 
     <!-- Map Container -->
     <div id="map" class="w-full bg-gray-200"
@@ -774,12 +826,161 @@
         const openTourPanel = () => {
             const panel = document.getElementById('tourPanel');
             panel.classList.remove('translate-y-full', 'opacity-0');
+            // Populate landmark cards when opening
+            populateLandmarkCards();
         };
 
         const closeTourPanel = () => {
             const panel = document.getElementById('tourPanel');
             panel.classList.add('translate-y-full', 'opacity-0');
         };
+
+        // Global state for custom tour
+        let selectedLandmarks = [];
+
+        const switchTourTab = (tab) => {
+            const distanceTab = document.getElementById('distanceTab');
+            const customTab = document.getElementById('customTab');
+            const distanceBtn = document.getElementById('distanceTabBtn');
+            const customBtn = document.getElementById('customTabBtn');
+
+            if (tab === 'distance') {
+                distanceTab.classList.remove('hidden');
+                customTab.classList.add('hidden');
+                distanceBtn.classList.add('text-indigo-600', 'border-indigo-600');
+                distanceBtn.classList.remove('text-gray-500', 'border-transparent');
+                customBtn.classList.remove('text-indigo-600', 'border-indigo-600');
+                customBtn.classList.add('text-gray-500', 'border-transparent');
+            } else {
+                distanceTab.classList.add('hidden');
+                customTab.classList.remove('hidden');
+                customBtn.classList.add('text-indigo-600', 'border-indigo-600');
+                customBtn.classList.remove('text-gray-500', 'border-transparent');
+                distanceBtn.classList.remove('text-indigo-600', 'border-indigo-600');
+                distanceBtn.classList.add('text-gray-500', 'border-transparent');
+                populateLandmarkCards();
+            }
+        };
+
+        const populateLandmarkCards = () => {
+            const container = document.getElementById('landmarkCardsContainer');
+
+            if (tourPoints.length === 0) {
+                container.innerHTML = '<div class="text-center text-gray-400 py-8 w-full"><p>No landmarks found. Move the map to a different location.</p></div>';
+                return;
+            }
+
+            container.innerHTML = '';
+
+            tourPoints.forEach((point, index) => {
+                const card = document.createElement('div');
+                card.className = 'flex-shrink-0 w-48 bg-white border-2 border-gray-200 rounded-xl overflow-hidden snap-start transition-all duration-200 hover:shadow-lg';
+                card.id = `landmark-card-${index}`;
+
+                const isSelected = selectedLandmarks.some(l => l.title === point.title);
+                if (isSelected) {
+                    card.classList.add('border-indigo-500', 'bg-indigo-50');
+                }
+
+                card.innerHTML = `
+                    <div class="h-32 bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-4xl font-bold">
+                        ${point.title.charAt(0)}
+                    </div>
+                    <div class="p-3">
+                        <h4 class="font-semibold text-sm text-gray-800 mb-2 line-clamp-2 h-10">${point.title}</h4>
+                        <button onclick="toggleLandmarkSelection(${index})" 
+                            id="btn-${index}"
+                            class="${isSelected ? 'bg-red-500 hover:bg-red-600' : 'bg-indigo-600 hover:bg-indigo-700'} text-white text-xs font-bold py-2 px-3 rounded-lg w-full transition">
+                            ${isSelected ? 'Remove' : 'Add to Tour'}
+                        </button>
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+        };
+
+        const toggleLandmarkSelection = (index) => {
+            const point = tourPoints[index];
+            const existingIndex = selectedLandmarks.findIndex(l => l.title === point.title);
+
+            if (existingIndex >= 0) {
+                // Remove from selection
+                selectedLandmarks.splice(existingIndex, 1);
+            } else {
+                // Add to selection
+                selectedLandmarks.push(point);
+            }
+
+            updateSelectedCount();
+            populateLandmarkCards();
+        };
+
+        const clearSelectedLandmarks = () => {
+            selectedLandmarks = [];
+            updateSelectedCount();
+            populateLandmarkCards();
+        };
+
+        const updateSelectedCount = () => {
+            document.getElementById('selectedCount').textContent = selectedLandmarks.length;
+            const btn = document.getElementById('createCustomTourBtn');
+            if (selectedLandmarks.length >= 2) {
+                btn.disabled = false;
+            } else {
+                btn.disabled = true;
+            }
+        };
+
+        const createCustomTour = () => {
+            if (selectedLandmarks.length < 2) {
+                showMessage("Not Enough Stops", "Please select at least 2 landmarks for your custom tour.");
+                return;
+            }
+
+            try {
+                const refLatLong = userMarker ? userMarker.getLatLng() : map.getCenter();
+
+                const startPoint = {
+                    lat: refLatLong.lat,
+                    lon: refLatLong.lng,
+                    title: "Start Point",
+                    isWiki: false
+                };
+
+                // Create route: Start -> Selected Landmarks -> Start
+                tourRoute = [startPoint, ...selectedLandmarks, startPoint];
+                currentTourStep = 0;
+
+                // Draw the tour path
+                const pathCoords = tourRoute.map(p => [p.lat, p.lon]);
+                if (tourPath) map.removeLayer(tourPath);
+                tourPath = L.polyline(pathCoords, {
+                    color: '#4f46e5',
+                    weight: 4,
+                    opacity: 0.7,
+                    dashArray: '10, 5'
+                }).addTo(map);
+
+                document.getElementById('navigationPanel').classList.remove('translate-y-full', 'opacity-0');
+
+                // CHANGE BUTTON TO STOP TOUR
+                const tourBtn = document.getElementById('startTourButton');
+                tourBtn.textContent = "Stop Tour";
+                tourBtn.classList.remove('bg-emerald-500', 'hover:bg-emerald-600');
+                tourBtn.classList.add('bg-red-500', 'hover:bg-red-600');
+                tourBtn.onclick = endTour;
+
+                updateNavigationPanel();
+                map.fitBounds(tourPath.getBounds(), { padding: [50, 50] });
+
+                showMessage("Custom Tour Created", `Your tour includes ${selectedLandmarks.length} stops!`);
+            } catch (e) {
+                console.error("Create Custom Tour Error:", e);
+                showMessage("Tour Error", "Failed to create custom tour: " + e.message);
+            }
+        };
+
 
         const fetchWikipediaLandmarks = async (lat, lon, keyword) => {
             if (isFetching) return;
