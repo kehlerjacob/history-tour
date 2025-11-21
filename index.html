@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v4.8</span></h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v4.9</span></h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
 
@@ -684,8 +684,32 @@
             }
 
             // Return the instruction and the distance to the maneuver location
+            let instructionText = bestStep.maneuver.instruction; // Try default first
+
+            // If OSRM doesn't provide a pre-formatted string, construct one
+            if (!instructionText || instructionText === "undefined") {
+                const type = bestStep.maneuver.type; // e.g., 'turn', 'new name', 'depart'
+                const modifier = bestStep.maneuver.modifier; // e.g., 'left', 'right', 'straight'
+                const name = bestStep.name || "the street";
+
+                if (type === 'depart') {
+                    instructionText = `Head ${modifier || 'forward'} on ${name}`;
+                } else if (type === 'turn') {
+                    instructionText = `Turn ${modifier} onto ${name}`;
+                } else if (type === 'new name') {
+                    instructionText = `Continue onto ${name}`;
+                } else if (type === 'arrive') {
+                    instructionText = `Arrive at destination`;
+                } else {
+                    instructionText = `${type} ${modifier ? modifier : ''} on ${name}`;
+                }
+
+                // Capitalize first letter
+                instructionText = instructionText.charAt(0).toUpperCase() + instructionText.slice(1);
+            }
+
             return {
-                instruction: bestStep.maneuver.instruction,
+                instruction: instructionText,
                 distance: minDistance,
                 finished: false,
                 index: maneuverIndex
@@ -1624,16 +1648,14 @@
 
             // Update the Panel with GPS Instructions
             if (!maneuverResult.finished) {
-                const distanceMeters = maneuverResult.distance.toFixed(0);
+                const distanceFeet = (maneuverResult.distance * 3.28084).toFixed(0); // Convert to feet
 
                 document.getElementById('currentNavInstruction').innerHTML = `
-                    <span class="font-bold">${maneuverResult.instruction}</span>
+                    <span class="font-bold text-lg">${maneuverResult.instruction}</span>
                 `;
 
                 document.getElementById('nextLandmarkInfo').innerHTML = `
-                    Distance to turn: <span class="font-bold">${distanceMeters} meters</span>.
-                    <br>
-                    Heading to <span class="font-bold">${target.title}</span>.
+                    in <span class="font-bold text-xl text-yellow-300">${distanceFeet} ft</span>
                 `;
 
                 // If the user has progressed past the last known maneuver, update the index.
