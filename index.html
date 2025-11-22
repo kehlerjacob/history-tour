@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.24</span>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.25</span>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -241,17 +241,21 @@
 
             <!-- Distance-Based Tour Tab -->
             <div id="distanceTab" class="tour-tab">
-                <div class="mb-4">
-                    <label for="tourDistance" class="block text-sm font-semibold text-gray-700 mb-2">
-                        Max Tour Distance (Miles)
-                    </label>
-                    <input type="number" id="tourDistance" min="1" max="15" value="5" step="0.5"
-                        class="block w-full rounded-xl border-2 border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-lg p-3">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-lg font-bold text-gray-800">Roam Mode</h2>
+                    <span id="compassStatus"
+                        class="text-xs font-mono bg-gray-100 text-gray-500 px-2 py-1 rounded">Compass Inactive</span>
                 </div>
-                <p class="text-sm text-gray-500 mb-4">Finds closest landmarks and optimizes for distance.</p>
-                <button onclick="handleCreateTour()"
-                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition duration-200 shadow-lg">
-                    Create Tour
+                <p class="text-sm text-gray-500 mb-4">Point your phone at landmarks to identify them automatically.</p>
+
+                <button id="startRoamingBtn" onclick="startRoaming()"
+                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition duration-200 shadow-lg mb-2">
+                    Start Roaming
+                </button>
+
+                <button id="stopRoamingBtn" onclick="stopRoaming()"
+                    class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-xl transition duration-200 shadow-lg hidden">
+                    Stop Roaming
                 </button>
             </div>
 
@@ -597,6 +601,129 @@
                 // --- END MODIFICATION ---
             }
         }
+
+        // --- ROAM MODE LOGIC ---
+
+        let isRoaming = false;
+        let roamInterval = null;
+        let currentHeading = 0;
+        let lastTriggeredLandmark = null;
+
+        const startRoaming = async () => {
+            // Request permission for iOS 13+
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const response = await DeviceOrientationEvent.requestPermission();
+                    if (response !== 'granted') {
+                        alert('Compass permission is required for Roam Mode.');
+                        return;
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+
+            isRoaming = true;
+            window.addEventListener('deviceorientation', handleOrientation);
+
+            // Start FOV Loop
+            roamInterval = setInterval(checkFOV, 1000); // Check every second
+
+            // Update UI
+            document.getElementById('startRoamingBtn').classList.add('hidden');
+            document.getElementById('stopRoamingBtn').classList.remove('hidden');
+            document.getElementById('compassStatus').textContent = "Compass Active";
+            document.getElementById('compassStatus').classList.replace('text-gray-500', 'text-green-600');
+            document.getElementById('compassStatus').classList.replace('bg-gray-100', 'bg-green-100');
+        };
+
+        const stopRoaming = () => {
+            isRoaming = false;
+            window.removeEventListener('deviceorientation', handleOrientation);
+            clearInterval(roamInterval);
+
+            // Update UI
+            document.getElementById('startRoamingBtn').classList.remove('hidden');
+            document.getElementById('stopRoamingBtn').classList.add('hidden');
+            document.getElementById('compassStatus').textContent = "Compass Inactive";
+            document.getElementById('compassStatus').classList.replace('text-green-600', 'text-gray-500');
+            document.getElementById('compassStatus').classList.replace('bg-green-100', 'bg-gray-100');
+        };
+
+        const handleOrientation = (event) => {
+            // iOS uses webkitCompassHeading, others use alpha
+            if (event.webkitCompassHeading) {
+                currentHeading = event.webkitCompassHeading;
+            } else if (event.alpha) {
+                currentHeading = 360 - event.alpha;
+            }
+        };
+
+        const checkFOV = () => {
+            if (!userMarker) return;
+
+            const userPos = userMarker.getLatLng();
+            const FOV_ANGLE = 45; // +/- 45 degrees
+            const MAX_DIST_METERS = 80; // Only identify things within 80m
+
+            // Find closest landmark in FOV
+            let closestTarget = null;
+            let minDist = Infinity;
+
+            // Iterate through all loaded landmarks (from tourPoints)
+            // We use tourPoints because it contains the full data we need
+            tourPoints.forEach(p => {
+                const dist = getDistance(userPos.lat, userPos.lng, p.lat, p.lon);
+
+                if (dist < MAX_DIST_METERS) {
+                    const bearing = getBearing(userPos.lat, userPos.lng, p.lat, p.lon);
+
+                    // Calculate angle difference
+                    let angleDiff = Math.abs(currentHeading - bearing);
+                    if (angleDiff > 180) angleDiff = 360 - angleDiff;
+
+                    if (angleDiff <= FOV_ANGLE) {
+                        if (dist < minDist) {
+                            minDist = dist;
+                            closestTarget = p;
+                        }
+                    }
+                }
+            });
+
+            if (closestTarget) {
+                // Debounce: Don't re-trigger the same one immediately
+                if (lastTriggeredLandmark !== closestTarget.title) {
+                    lastTriggeredLandmark = closestTarget.title;
+
+                    // Auto-open panel
+                    // We need to find the marker ID if possible, or just pass 0
+                    const markerId = closestTarget.marker ? closestTarget.marker._leaflet_id : 0;
+                    openKnowledgePanel(closestTarget.title, markerId);
+
+                    // Vibrate if supported
+                    if (navigator.vibrate) navigator.vibrate(200);
+                }
+            } else {
+                // Reset if we moved away
+                // Optional: only reset if we are FAR from the last one
+            }
+        };
+
+        const getBearing = (startLat, startLng, destLat, destLng) => {
+            const startLatRad = startLat * (Math.PI / 180);
+            const startLngRad = startLng * (Math.PI / 180);
+            const destLatRad = destLat * (Math.PI / 180);
+            const destLngRad = destLng * (Math.PI / 180);
+
+            const y = Math.sin(destLngRad - startLngRad) * Math.cos(destLatRad);
+            const x = Math.cos(startLatRad) * Math.sin(destLatRad) -
+                Math.sin(startLatRad) * Math.cos(destLatRad) * Math.cos(destLngRad - startLngRad);
+
+            let brng = Math.atan2(y, x);
+            brng = brng * (180 / Math.PI);
+            return (brng + 360) % 360;
+        };
 
         // --- UPDATED: COMPASS PERMISSION LOGIC ---
 
