@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.20</span>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.21</span>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -1615,10 +1615,50 @@
             });
         };
 
-        const fetchAndPinLandmarks = () => {
-            const center = map.getCenter();
-            // Pass the fixed radius implicitly
-            fetchWikipediaLandmarks(center.lat, center.lng);
+        const fetchAndPinLandmarks = async () => {
+            if (isFetching) return;
+            isFetching = true;
+
+            // Clear existing markers
+            landmarkMarkers.clearLayers();
+            tourPoints = []; // Reset tour points
+
+            // Show loading indicator
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            const loadingText = document.getElementById('loadingText');
+            const loadingProgress = document.getElementById('loadingProgress');
+
+            loadingText.textContent = "Scanning for historic buildings...";
+            loadingOverlay.classList.remove('hidden');
+            loadingProgress.style.width = '30%';
+
+            try {
+                const center = map.getCenter();
+                const landmarks = await fetchWikipediaLandmarks(center.lat, center.lng);
+
+                loadingProgress.style.width = '70%';
+
+                if (landmarks.length === 0) {
+                    showMessage("No Buildings Found", "Could not find any buildings or structures nearby. Try moving the map.");
+                } else {
+                    landmarks.forEach(p => {
+                        pinLandmark(p.lat, p.lon, p.title, p.url, p.imageUrl, {
+                            extract: p.extract,
+                            constructionDate: p.constructionDate,
+                            url: p.url
+                        });
+                    });
+                    showMessage("Discovery Complete", `Found ${landmarks.length} historic places nearby.`);
+                }
+
+            } catch (error) {
+                console.error("Error in fetchAndPinLandmarks:", error);
+                showMessage("Error", "Failed to load landmarks. Please try again.");
+            } finally {
+                isFetching = false;
+                loadingOverlay.classList.add('hidden');
+                loadingProgress.style.width = '0%';
+            }
         };
 
 
