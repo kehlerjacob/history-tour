@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.26</span>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.27</span>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -656,12 +656,23 @@
             stopBtn.classList.remove('hidden');
 
             // Update Compass Button Status
-            const compassBtn = document.getElementById('compassStatus'); // Assuming compassStatus is the button/indicator
+            const compassBtn = document.getElementById('compassStatusBtn');
             if (compassBtn) {
                 compassBtn.textContent = "Compass Active";
                 compassBtn.classList.replace('text-gray-500', 'text-green-600');
                 compassBtn.classList.replace('bg-gray-100', 'bg-green-100');
             }
+
+            // Disable Map Interaction & Hide Controls
+            map.dragging.disable();
+            map.touchZoom.disable();
+            map.doubleClickZoom.disable();
+            map.scrollWheelZoom.disable();
+            map.boxZoom.disable();
+            map.keyboard.disable();
+            if (map.tap) map.tap.disable();
+
+            document.querySelector('.leaflet-control-container').style.display = 'none';
         };
 
         const stopRoaming = () => {
@@ -669,11 +680,27 @@
             window.removeEventListener('deviceorientation', handleOrientation);
             clearInterval(roamInterval);
 
-            // Reset Map Rotation
+            // Reset Map Rotation & Scale
             const mapContainer = document.getElementById('map');
             mapContainer.style.transform = '';
             mapContainer.style.transition = 'transform 0.5s ease-out';
             setTimeout(() => { mapContainer.style.transition = ''; }, 500);
+
+            // Reset Markers
+            document.querySelectorAll('.leaflet-marker-icon').forEach(icon => {
+                icon.style.transform = icon.style.transform.replace(/rotate\([^\)]+\)/, '');
+            });
+
+            // Re-enable Map Interaction & Show Controls
+            map.dragging.enable();
+            map.touchZoom.enable();
+            map.doubleClickZoom.enable();
+            map.scrollWheelZoom.enable();
+            map.boxZoom.enable();
+            map.keyboard.enable();
+            if (map.tap) map.tap.enable();
+
+            document.querySelector('.leaflet-control-container').style.display = 'block';
 
             // Update UI
             openTourPanel();
@@ -681,7 +708,7 @@
             const stopBtn = document.getElementById('headerStopRoamingBtn');
             if (stopBtn) stopBtn.classList.add('hidden');
 
-            const compassBtn = document.getElementById('compassStatus'); // Assuming compassStatus is the button/indicator
+            const compassBtn = document.getElementById('compassStatusBtn');
             if (compassBtn) {
                 compassBtn.textContent = "Compass Inactive";
                 compassBtn.classList.replace('text-green-600', 'text-gray-500');
@@ -697,10 +724,21 @@
                 currentHeading = 360 - event.alpha;
             }
 
-            // Rotate Map Container
-            // We rotate the map container OPPOSITE to the heading to keep "Up" as the direction we are facing.
+            // Rotate Map Container (Scale 1.5 to cover edges)
             const mapContainer = document.getElementById('map');
-            mapContainer.style.transform = `rotate(-${currentHeading}deg)`;
+            mapContainer.style.transform = `scale(1.5) rotate(-${currentHeading}deg)`;
+
+            // Counter-rotate markers to keep them upright
+            document.querySelectorAll('.leaflet-marker-icon').forEach(icon => {
+                // We need to preserve the translate3d part of the transform
+                // Leaflet uses translate3d(x,y,z) for positioning. We append rotate().
+                const currentTransform = icon.style.transform;
+                if (currentTransform.includes('translate3d')) {
+                    // Replace existing rotate or append new one
+                    const translatePart = currentTransform.match(/translate3d\([^)]+\)/)[0];
+                    icon.style.transform = `${translatePart} rotate(${currentHeading}deg)`;
+                }
+            });
 
             // Center on user
             if (userMarker) {
