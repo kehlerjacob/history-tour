@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.19</span>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.20</span>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -1489,65 +1489,97 @@
 
 
         const fetchWikipediaLandmarks = async (lat, lon) => {
-            // Reverting to generator=geosearch as CirrusSearch nearcoord was unreliable.
-            // We will fetch a larger batch and filter client-side using Wikidata IDs (pageprops).
+            // Deep Scan Strategy:
+            // 1. Fetch 500 raw items using list=geosearch (lightweight).
+            // 2. Fetch details (props) for ALL of them in batches of 50.
+            // 3. Apply Smart Filter to the full dataset.
 
             const radius = 10000; // 10km
-            const limit = 50; // Max for generator is 50
+            const limit = 500; // Max for geosearch
 
-            // We use generator=geosearch to get pages, then prop=pageprops to get Wikidata ID (wikibase_item)
-            const apiUrl = `${WIKIPEDIA_API_URL}?action=query&generator=geosearch&ggscoord=${lat}|${lon}&ggsradius=${radius}&ggslimit=${limit}&prop=coordinates|pageimages|extracts|pageprops|info&pithumbsize=200&exintro=1&explaintext=1&inprop=url&format=json&origin=*`;
+            // Step 1: Get IDs and coords
+            const listUrl = `${WIKIPEDIA_API_URL}?action=query&list=geosearch&gscoord=${lat}|${lon}&gsradius=${radius}&gslimit=${limit}&format=json&origin=*`;
 
+            let rawItems = [];
             try {
-                console.log("Fetching landmarks with Geosearch + Wikidata...");
-                const data = await fetchWithRetry(apiUrl);
-
-                if (!data.query || !data.query.pages) {
-                    console.warn("No landmarks found.");
-                    return [];
+                console.log("Step 1: Fetching 500 raw items...");
+                const data = await fetchWithRetry(listUrl);
+                if (data.query && data.query.geosearch) {
+                    rawItems = data.query.geosearch;
                 }
-
-                const pages = Object.values(data.query.pages);
-                console.log(`Found ${pages.length} raw landmarks.`);
-
-                // Filter for Buildings/Structures using wikibase-shortdesc and title
-                // This is a "Smart Filter" that is better than just title matching but doesn't require extra API calls.
-                const buildingKeywords = [
-                    'building', 'structure', 'house', 'tower', 'church', 'cathedral', 'museum',
-                    'station', 'school', 'library', 'hotel', 'theater', 'monument', 'statue',
-                    'park', 'bridge', 'skyscraper', 'temple', 'synagogue', 'mosque', 'palace',
-                    'castle', 'fort', 'stadium', 'arena', 'university', 'college', 'hall'
-                ];
-
-                return pages.map(p => {
-                    if (!p.coordinates || p.coordinates.length === 0) return null;
-
-                    const title = p.title.toLowerCase();
-                    const desc = p.pageprops?.['wikibase-shortdesc']?.toLowerCase() || "";
-
-                    // Check if title OR description contains any building keyword
-                    const isBuilding = buildingKeywords.some(kw => title.includes(kw) || desc.includes(kw));
-
-                    if (!isBuilding) return null;
-
-                    return {
-                        pageid: p.pageid,
-                        title: p.title,
-                        lat: p.coordinates[0].lat,
-                        lon: p.coordinates[0].lon,
-                        dist: p.coordinates[0].dist || 0,
-                        imageUrl: p.thumbnail ? p.thumbnail.source : null,
-                        extract: p.extract || "No description available.",
-                        url: p.fullurl || `https://en.wikipedia.org/?curid=${p.pageid}`,
-                        constructionDate: p.pageprops?.['wikibase-shortdesc'] || null,
-                        wikibaseItem: p.pageprops?.wikibase_item
-                    };
-                }).filter(p => p !== null);
-
-            } catch (error) {
-                console.error("Geosearch Error:", error);
-                throw error;
+            } catch (e) {
+                console.error("Geosearch failed", e);
+                return [];
             }
+
+            if (rawItems.length === 0) {
+                console.warn("No raw items found.");
+                return [];
+            }
+
+            console.log(`Step 1 Complete: Found ${rawItems.length} raw items.`);
+
+            // Create a map for distance lookup
+            const distMap = new Map(rawItems.map(i => [i.pageid, i.dist]));
+
+            // Step 2: Batch fetch details
+            // Chunk into 50s
+            const chunks = [];
+            for (let i = 0; i < rawItems.length; i += 50) {
+                chunks.push(rawItems.slice(i, i + 50));
+            }
+
+            const buildingKeywords = [
+                'building', 'structure', 'house', 'tower', 'church', 'cathedral', 'museum',
+                'station', 'school', 'library', 'hotel', 'theater', 'monument', 'statue',
+                'park', 'bridge', 'skyscraper', 'temple', 'synagogue', 'mosque', 'palace',
+                'castle', 'fort', 'stadium', 'arena', 'university', 'college', 'hall'
+            ];
+
+            let validLandmarks = [];
+
+            console.log(`Step 2: Fetching details for ${chunks.length} batches...`);
+
+            // Process batches in parallel
+            const batchPromises = chunks.map(async (chunk) => {
+                const pageIds = chunk.map(p => p.pageid).join('|');
+                const detailsUrl = `${WIKIPEDIA_API_URL}?action=query&prop=coordinates|pageimages|extracts|pageprops|info&pageids=${pageIds}&pithumbsize=200&exintro=1&explaintext=1&inprop=url&format=json&origin=*`;
+
+                try {
+                    const data = await fetchWithRetry(detailsUrl);
+                    const pages = data.query?.pages || {};
+
+                    Object.values(pages).forEach(p => {
+                        const title = p.title.toLowerCase();
+                        const desc = p.pageprops?.['wikibase-shortdesc']?.toLowerCase() || "";
+
+                        // Smart Filter: Check if title OR description contains any building keyword
+                        const isBuilding = buildingKeywords.some(kw => title.includes(kw) || desc.includes(kw));
+
+                        if (isBuilding && p.coordinates) {
+                            validLandmarks.push({
+                                pageid: p.pageid,
+                                title: p.title,
+                                lat: p.coordinates[0].lat,
+                                lon: p.coordinates[0].lon,
+                                dist: distMap.get(p.pageid) || 0,
+                                imageUrl: p.thumbnail ? p.thumbnail.source : null,
+                                extract: p.extract || "No description available.",
+                                url: p.fullurl || `https://en.wikipedia.org/?curid=${p.pageid}`,
+                                constructionDate: p.pageprops?.['wikibase-shortdesc'] || null,
+                                wikibaseItem: p.pageprops?.wikibase_item
+                            });
+                        }
+                    });
+                } catch (e) {
+                    console.warn("Batch details fetch failed", e);
+                }
+            });
+
+            await Promise.all(batchPromises);
+
+            console.log(`Step 2 Complete: ${validLandmarks.length} landmarks passed the Smart Filter.`);
+            return validLandmarks;
         };
 
         const pinLandmark = (lat, lon, title, url, imageUrl, details = {}) => {
