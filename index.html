@@ -1136,7 +1136,7 @@
                         }
                     } catch (error) {
                         console.error("AI Summary failed:", error);
-                        loadingMsg.textContent = "⚠️ Could not generate AI summary. Check API Key.";
+                        loadingMsg.textContent = `⚠️ Error: ${error.message}`;
                         loadingMsg.classList.remove('animate-pulse');
                         loadingMsg.classList.add('text-red-500');
                     }
