@@ -153,8 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.18</span>
-                </h1>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.19</span>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -1490,45 +1489,63 @@
 
 
         const fetchWikipediaLandmarks = async (lat, lon) => {
-            // Use CirrusSearch with nearcoord and haswbstatement to filter for buildings/structures
-            // P31=Q41176 (Building) OR P31=Q811979 (Architectural Structure)
-            const radius = "10km";
-            const query = `nearcoord:${radius},${lat},${lon} (haswbstatement:P31=Q41176 OR haswbstatement:P31=Q811979)`;
+            // Reverting to generator=geosearch as CirrusSearch nearcoord was unreliable.
+            // We will fetch a larger batch and filter client-side using Wikidata IDs (pageprops).
 
-            const apiUrl = `${WIKIPEDIA_API_URL}?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=50&prop=coordinates|pageimages|extracts|pageprops|info&pithumbsize=200&exintro=1&explaintext=1&inprop=url&format=json&origin=*`;
+            const radius = 10000; // 10km
+            const limit = 50; // Max for generator is 50
+
+            // We use generator=geosearch to get pages, then prop=pageprops to get Wikidata ID (wikibase_item)
+            const apiUrl = `${WIKIPEDIA_API_URL}?action=query&generator=geosearch&ggscoord=${lat}|${lon}&ggsradius=${radius}&ggslimit=${limit}&prop=coordinates|pageimages|extracts|pageprops|info&pithumbsize=200&exintro=1&explaintext=1&inprop=url&format=json&origin=*`;
 
             try {
-                console.log("Fetching landmarks with Smart Search...");
+                console.log("Fetching landmarks with Geosearch + Wikidata...");
                 const data = await fetchWithRetry(apiUrl);
 
                 if (!data.query || !data.query.pages) {
-                    console.warn("No landmarks found with Smart Search.");
+                    console.warn("No landmarks found.");
                     return [];
                 }
 
                 const pages = Object.values(data.query.pages);
-                console.log(`Found ${pages.length} landmarks.`);
+                console.log(`Found ${pages.length} raw landmarks.`);
 
-                // Map to our internal format
+                // Filter for Buildings/Structures using wikibase-shortdesc and title
+                // This is a "Smart Filter" that is better than just title matching but doesn't require extra API calls.
+                const buildingKeywords = [
+                    'building', 'structure', 'house', 'tower', 'church', 'cathedral', 'museum',
+                    'station', 'school', 'library', 'hotel', 'theater', 'monument', 'statue',
+                    'park', 'bridge', 'skyscraper', 'temple', 'synagogue', 'mosque', 'palace',
+                    'castle', 'fort', 'stadium', 'arena', 'university', 'college', 'hall'
+                ];
+
                 return pages.map(p => {
-                    // Ensure we have coordinates
                     if (!p.coordinates || p.coordinates.length === 0) return null;
+
+                    const title = p.title.toLowerCase();
+                    const desc = p.pageprops?.['wikibase-shortdesc']?.toLowerCase() || "";
+
+                    // Check if title OR description contains any building keyword
+                    const isBuilding = buildingKeywords.some(kw => title.includes(kw) || desc.includes(kw));
+
+                    if (!isBuilding) return null;
 
                     return {
                         pageid: p.pageid,
                         title: p.title,
                         lat: p.coordinates[0].lat,
                         lon: p.coordinates[0].lon,
-                        dist: 0, // We don't get distance from search, but we calculate it later
+                        dist: p.coordinates[0].dist || 0,
                         imageUrl: p.thumbnail ? p.thumbnail.source : null,
                         extract: p.extract || "No description available.",
                         url: p.fullurl || `https://en.wikipedia.org/?curid=${p.pageid}`,
-                        constructionDate: p.pageprops?.['wikibase-shortdesc'] || null
+                        constructionDate: p.pageprops?.['wikibase-shortdesc'] || null,
+                        wikibaseItem: p.pageprops?.wikibase_item
                     };
-                }).filter(p => p !== null); // Remove items without coordinates
+                }).filter(p => p !== null);
 
             } catch (error) {
-                console.error("Smart Search Error:", error);
+                console.error("Geosearch Error:", error);
                 throw error;
             }
         };
