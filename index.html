@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.12</span>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.14</span>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -233,6 +233,10 @@
                     class="px-4 py-2 font-semibold text-gray-500 border-b-2 border-transparent hover:text-indigo-600 transition">
                     Custom Tour
                 </button>
+                <button id="settingsTabBtn" onclick="switchTourTab('settings')"
+                    class="px-4 py-2 font-semibold text-gray-500 border-b-2 border-transparent hover:text-indigo-600 transition">
+                    Settings
+                </button>
             </div>
 
             <!-- Distance-Based Tour Tab -->
@@ -276,11 +280,26 @@
                 <p id="tourStatus" class="text-xs text-gray-500 mb-2">Creates an optimized route through your selected
                     stops.</p>
 
-                <!-- Create Custom Tour Button -->
-                <button onclick="handleCreateCustomTour()"
-                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-xl transition duration-200 shadow-lg disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    id="createCustomTourBtn" disabled>
-                    Create Custom Tour
+                </button>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="settingsTab" class="tour-tab hidden">
+                <div class="mb-4">
+                    <label for="geminiApiKey" class="block text-sm font-semibold text-gray-700 mb-2">
+                        Gemini API Key (for AI Summaries)
+                    </label>
+                    <input type="password" id="geminiApiKey" placeholder="Enter your API Key"
+                        class="block w-full rounded-xl border-2 border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-lg p-3 mb-2">
+                    <p class="text-xs text-gray-500">
+                        Required for AI-generated summaries. Get a key from <a
+                            href="https://aistudio.google.com/app/apikey" target="_blank"
+                            class="text-indigo-600 underline">Google AI Studio</a>.
+                    </p>
+                </div>
+                <button onclick="saveSettings()"
+                    class="w-full bg-gray-800 hover:bg-gray-900 text-white font-bold py-3 px-6 rounded-xl transition duration-200 shadow-lg">
+                    Save Settings
                 </button>
             </div>
         </div>
@@ -984,7 +1003,52 @@
             panel.classList.add('translate-y-full', 'opacity-0');
         };
 
-        const openKnowledgePanel = (title, markerId) => {
+        // --- GEMINI AI INTEGRATION ---
+
+        const fetchFullWikipediaContent = async (pageId) => {
+            const url = `${WIKIPEDIA_API_URL}?action=query&prop=extracts&explaintext=1&pageids=${pageId}&format=json&origin=*`;
+            try {
+                const data = await fetchWithRetry(url);
+                const page = data.query?.pages?.[pageId];
+                return page?.extract || null;
+            } catch (error) {
+                console.error("Error fetching full content:", error);
+                return null;
+            }
+        };
+
+        const generateGeminiSummary = async (text, apiKey) => {
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+            const prompt = `Summarize this landmark description into a concise, engaging overview (max 3 sentences). Highlight when it was built/established if mentioned. Text: ${text.substring(0, 10000)}`; // Limit text to avoid token limits
+
+            const payload = {
+                contents: [{
+                    parts: [{ text: prompt }]
+                }]
+            };
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error.message);
+                }
+
+                return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+            } catch (error) {
+                console.error("Gemini API Error:", error);
+                throw error;
+            }
+        };
+
+        const openKnowledgePanel = async (title, markerId) => {
             // Find the landmark in tourPoints
             const landmark = tourPoints.find(p => p.title === title);
             if (!landmark) {
@@ -1018,8 +1082,13 @@
                 dateElement.classList.add('hidden');
             }
 
-            // Description
-            document.getElementById('knowledgePanelDescription').innerHTML = `<p>${landmark.extract}</p>`;
+            // Description & AI Summary Logic
+            const descriptionContainer = document.getElementById('knowledgePanelDescription');
+            // Use saved key or hardcoded default
+            const apiKey = localStorage.getItem('geminiApiKey') || "AIzaSyBiCOtYlbx4FyHaZVrwDo0XkBrGDMyVp7w";
+
+            // Start with the standard extract
+            descriptionContainer.innerHTML = `<p>${landmark.extract}</p>`;
 
             // Wikipedia link
             document.getElementById('knowledgePanelLink').href = landmark.fullUrl;
@@ -1027,6 +1096,58 @@
             // Show panel
             const panel = document.getElementById('knowledgePanel');
             panel.classList.remove('translate-y-full', 'opacity-0');
+
+            // Trigger AI Summary if Key Exists
+            if (apiKey) {
+                // Extract pageId from the URL (it's stored as curid=...) or we can find it in tourPoints if we stored it.
+                // We didn't explicitly store pageId in tourPoints, but we can parse it from the URL or just pass it if we update pinLandmark.
+                // Actually, let's update pinLandmark to store pageId to be safe.
+                // For now, let's try to extract it from the fullUrl if possible, or just use the title to find it in our previous data?
+                // Wait, we have the `landmark` object which came from `tourPoints`.
+                // In `fetchWikipediaLandmarks`, we pushed to `tourPoints`.
+                // Let's check if we stored `pageid`. We didn't. We only stored `url`.
+                // The URL is `https://en.wikipedia.org/?curid=${p.pageid}`.
+
+                let pageId = null;
+                try {
+                    const urlObj = new URL(landmark.url);
+                    pageId = urlObj.searchParams.get('curid');
+                } catch (e) {
+                    console.warn("Could not parse pageId from URL", landmark.url);
+                }
+
+                if (pageId) {
+                    const loadingMsg = document.createElement('p');
+                    loadingMsg.className = "text-sm text-indigo-600 font-semibold mt-2 animate-pulse";
+                    loadingMsg.textContent = "✨ Generating AI Summary...";
+                    descriptionContainer.appendChild(loadingMsg);
+
+                    try {
+                        const fullText = await fetchFullWikipediaContent(pageId);
+                        if (fullText) {
+                            const summary = await generateGeminiSummary(fullText, apiKey);
+                            if (summary) {
+                                descriptionContainer.innerHTML = `<p class="font-medium text-gray-800 border-l-4 border-indigo-500 pl-3 bg-indigo-50 py-2 pr-2 rounded-r-lg mb-2">✨ ${summary}</p>`;
+                            } else {
+                                loadingMsg.remove();
+                            }
+                        } else {
+                            loadingMsg.remove();
+                        }
+                    } catch (error) {
+                        console.error("AI Summary failed:", error);
+                        loadingMsg.textContent = "⚠️ Could not generate AI summary. Check API Key.";
+                        loadingMsg.classList.remove('animate-pulse');
+                        loadingMsg.classList.add('text-red-500');
+                    }
+                }
+            } else {
+                // Optional: Add a prompt to add API key
+                const prompt = document.createElement('p');
+                prompt.className = "text-xs text-gray-400 mt-2 italic";
+                prompt.innerHTML = `Want AI summaries? <button onclick="openTourPanel(); switchTourTab('settings')" class="text-indigo-500 hover:underline">Add Gemini API Key</button>`;
+                descriptionContainer.appendChild(prompt);
+            }
         };
 
         const closeKnowledgePanel = () => {
@@ -1040,24 +1161,54 @@
         const switchTourTab = (tab) => {
             const distanceTab = document.getElementById('distanceTab');
             const customTab = document.getElementById('customTab');
+            const settingsTab = document.getElementById('settingsTab');
+
             const distanceBtn = document.getElementById('distanceTabBtn');
             const customBtn = document.getElementById('customTabBtn');
+            const settingsBtn = document.getElementById('settingsTabBtn');
 
+            // Reset all tabs
+            distanceTab.classList.add('hidden');
+            customTab.classList.add('hidden');
+            settingsTab.classList.add('hidden');
+
+            distanceBtn.classList.remove('text-indigo-600', 'border-indigo-600');
+            distanceBtn.classList.add('text-gray-500', 'border-transparent');
+
+            customBtn.classList.remove('text-indigo-600', 'border-indigo-600');
+            customBtn.classList.add('text-gray-500', 'border-transparent');
+
+            settingsBtn.classList.remove('text-indigo-600', 'border-indigo-600');
+            settingsBtn.classList.add('text-gray-500', 'border-transparent');
+
+            // Activate selected tab
             if (tab === 'distance') {
                 distanceTab.classList.remove('hidden');
-                customTab.classList.add('hidden');
                 distanceBtn.classList.add('text-indigo-600', 'border-indigo-600');
                 distanceBtn.classList.remove('text-gray-500', 'border-transparent');
-                customBtn.classList.remove('text-indigo-600', 'border-indigo-600');
-                customBtn.classList.add('text-gray-500', 'border-transparent');
-            } else {
-                distanceTab.classList.add('hidden');
+            } else if (tab === 'custom') {
                 customTab.classList.remove('hidden');
                 customBtn.classList.add('text-indigo-600', 'border-indigo-600');
                 customBtn.classList.remove('text-gray-500', 'border-transparent');
-                distanceBtn.classList.remove('text-indigo-600', 'border-indigo-600');
-                distanceBtn.classList.add('text-gray-500', 'border-transparent');
                 populateLandmarkCards();
+            } else if (tab === 'settings') {
+                settingsTab.classList.remove('hidden');
+                settingsBtn.classList.add('text-indigo-600', 'border-indigo-600');
+                settingsBtn.classList.remove('text-gray-500', 'border-transparent');
+                // Load saved key or default
+                const savedKey = localStorage.getItem('geminiApiKey') || "AIzaSyBiCOtYlbx4FyHaZVrwDo0XkBrGDMyVp7w";
+                document.getElementById('geminiApiKey').value = savedKey;
+            }
+        };
+
+        const saveSettings = () => {
+            const apiKey = document.getElementById('geminiApiKey').value.trim();
+            if (apiKey) {
+                localStorage.setItem('geminiApiKey', apiKey);
+                alert("Settings saved!");
+                closeTourPanel();
+            } else {
+                alert("Please enter a valid API Key.");
             }
         };
 
