@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.27</span>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.28</span>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -365,8 +365,9 @@
     </style>
 
     <!-- Map Container -->
-    <div id="map" class="w-full bg-gray-200"
-        style="position: fixed !important; top: 80px; left: 0; right: 0; bottom: 0; z-index: 1 !important;"></div>
+    <div id="map-wrapper" class="absolute inset-0 overflow-hidden z-0">
+        <div id="map" class="w-full h-full bg-gray-200"></div>
+    </div>
 
     <!-- Loading Overlay -->
     <div id="loadingOverlay"
@@ -724,9 +725,11 @@
                 currentHeading = 360 - event.alpha;
             }
 
-            // Rotate Map Container (Scale 1.5 to cover edges)
+            // Rotate Map Container (Super Scale 2.5 to cover edges)
             const mapContainer = document.getElementById('map');
-            mapContainer.style.transform = `scale(1.5) rotate(-${currentHeading}deg)`;
+            mapContainer.style.transformOrigin = 'center center';
+            mapContainer.style.transform = `scale(2.5) rotate(-${currentHeading}deg)`;
+            mapContainer.style.transition = 'transform 0.1s linear'; // Smooth rotation
 
             // Counter-rotate markers to keep them upright
             document.querySelectorAll('.leaflet-marker-icon').forEach(icon => {
