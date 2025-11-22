@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.25</span>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.26</span>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -225,9 +225,9 @@
 
             <!-- Tab Navigation -->
             <div class="flex gap-2 mb-3 border-b border-gray-200">
-                <button id="distanceTabBtn" onclick="switchTourTab('distance')"
-                    class="px-4 py-2 font-semibold text-indigo-600 border-b-2 border-indigo-600 transition">
-                    Distance-Based
+                <button onclick="switchTab('distance')" id="tab-distance"
+                    class="flex-1 py-3 text-sm font-medium text-indigo-600 border-b-2 border-indigo-600 focus:outline-none transition-colors duration-200">
+                    Roam
                 </button>
                 <button id="customTabBtn" onclick="switchTourTab('custom')"
                     class="px-4 py-2 font-semibold text-gray-500 border-b-2 border-transparent hover:text-indigo-600 transition">
@@ -243,8 +243,10 @@
             <div id="distanceTab" class="tour-tab">
                 <div class="flex items-center justify-between mb-4">
                     <h2 class="text-lg font-bold text-gray-800">Roam Mode</h2>
-                    <span id="compassStatus"
-                        class="text-xs font-mono bg-gray-100 text-gray-500 px-2 py-1 rounded">Compass Inactive</span>
+                    <button id="compassStatusBtn" onclick="startRoaming()"
+                        class="text-xs font-mono bg-gray-100 text-gray-500 px-2 py-1 rounded hover:bg-gray-200 transition">
+                        Compass Inactive
+                    </button>
                 </div>
                 <p class="text-sm text-gray-500 mb-4">Point your phone at landmarks to identify them automatically.</p>
 
@@ -629,12 +631,37 @@
             // Start FOV Loop
             roamInterval = setInterval(checkFOV, 1000); // Check every second
 
-            // Update UI
-            document.getElementById('startRoamingBtn').classList.add('hidden');
-            document.getElementById('stopRoamingBtn').classList.remove('hidden');
-            document.getElementById('compassStatus').textContent = "Compass Active";
-            document.getElementById('compassStatus').classList.replace('text-gray-500', 'text-green-600');
-            document.getElementById('compassStatus').classList.replace('bg-gray-100', 'bg-green-100');
+            // Update UI - Hide Panel & Change Header Button
+            closeTourPanel();
+            // "change the 'start tour' button in the header" -> The header just has the title.
+            // Let's look at the header again.
+            // <header> ... <h1> ... <button id="menuBtn"> ... </header>
+            // There is no start tour button in the header.
+            // Maybe they mean the "Create Tour" button in the tab?
+            // "When you click 'start roaming' Make the configure tour popup hide" -> Done (closeTourPanel)
+            // "and change the 'start tour' button in the header to a 'stop roaming' button"
+            // I will inject a "Stop Roaming" button into the header area or replace the menu button?
+            // Let's add a dedicated "Stop Roaming" button to the header that is hidden by default.
+
+            const header = document.querySelector('header div');
+            let stopBtn = document.getElementById('headerStopRoamingBtn');
+            if (!stopBtn) {
+                stopBtn = document.createElement('button');
+                stopBtn.id = 'headerStopRoamingBtn';
+                stopBtn.className = 'hidden bg-red-500 hover:bg-red-600 text-white text-xs font-bold py-2 px-4 rounded-lg transition shadow-md ml-2';
+                stopBtn.textContent = 'Stop Roaming';
+                stopBtn.onclick = stopRoaming;
+                header.appendChild(stopBtn);
+            }
+            stopBtn.classList.remove('hidden');
+
+            // Update Compass Button Status
+            const compassBtn = document.getElementById('compassStatus'); // Assuming compassStatus is the button/indicator
+            if (compassBtn) {
+                compassBtn.textContent = "Compass Active";
+                compassBtn.classList.replace('text-gray-500', 'text-green-600');
+                compassBtn.classList.replace('bg-gray-100', 'bg-green-100');
+            }
         };
 
         const stopRoaming = () => {
@@ -642,12 +669,24 @@
             window.removeEventListener('deviceorientation', handleOrientation);
             clearInterval(roamInterval);
 
+            // Reset Map Rotation
+            const mapContainer = document.getElementById('map');
+            mapContainer.style.transform = '';
+            mapContainer.style.transition = 'transform 0.5s ease-out';
+            setTimeout(() => { mapContainer.style.transition = ''; }, 500);
+
             // Update UI
-            document.getElementById('startRoamingBtn').classList.remove('hidden');
-            document.getElementById('stopRoamingBtn').classList.add('hidden');
-            document.getElementById('compassStatus').textContent = "Compass Inactive";
-            document.getElementById('compassStatus').classList.replace('text-green-600', 'text-gray-500');
-            document.getElementById('compassStatus').classList.replace('bg-green-100', 'bg-gray-100');
+            openTourPanel();
+
+            const stopBtn = document.getElementById('headerStopRoamingBtn');
+            if (stopBtn) stopBtn.classList.add('hidden');
+
+            const compassBtn = document.getElementById('compassStatus'); // Assuming compassStatus is the button/indicator
+            if (compassBtn) {
+                compassBtn.textContent = "Compass Inactive";
+                compassBtn.classList.replace('text-green-600', 'text-gray-500');
+                compassBtn.classList.replace('bg-green-100', 'bg-gray-100');
+            }
         };
 
         const handleOrientation = (event) => {
@@ -656,6 +695,17 @@
                 currentHeading = event.webkitCompassHeading;
             } else if (event.alpha) {
                 currentHeading = 360 - event.alpha;
+            }
+
+            // Rotate Map Container
+            // We rotate the map container OPPOSITE to the heading to keep "Up" as the direction we are facing.
+            const mapContainer = document.getElementById('map');
+            mapContainer.style.transform = `rotate(-${currentHeading}deg)`;
+
+            // Center on user
+            if (userMarker) {
+                const latLng = userMarker.getLatLng();
+                map.setView(latLng, map.getZoom(), { animate: false });
             }
         };
 
