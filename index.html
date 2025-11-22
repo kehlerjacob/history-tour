@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.29</span>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.30</span>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -316,7 +316,7 @@
 
     <!-- Knowledge Panel (Slide-up Card) -->
     <div id="knowledgePanel" style="padding-bottom: calc(env(safe-area-inset-bottom, 20px) + 1rem);"
-        class="fixed inset-x-0 bottom-0 bg-white text-gray-800 p-4 sm:p-6 shadow-2xl rounded-t-3xl transition-all duration-300 transform translate-y-full opacity-0 z-[5001] max-h-[80vh] overflow-y-auto">
+        class="fixed inset-x-0 bottom-0 bg-white text-gray-800 p-4 sm:p-6 shadow-2xl rounded-t-3xl transition-all duration-300 transform translate-y-full opacity-0 z-[4000] max-h-[40vh] overflow-y-auto">
         <div class="max-w-4xl mx-auto flex flex-col">
 
             <!-- Header with Close Button -->
@@ -642,19 +642,13 @@
             // "When you click 'start roaming' Make the configure tour popup hide" -> Done (closeTourPanel)
             // "and change the 'start tour' button in the header to a 'stop roaming' button"
             // I will inject a "Stop Roaming" button into the header area or replace the menu button?
-            // Let's add a dedicated "Stop Roaming" button to the header that is hidden by default.
-
-            const header = document.querySelector('header div');
-            let stopBtn = document.getElementById('headerStopRoamingBtn');
-            if (!stopBtn) {
-                stopBtn = document.createElement('button');
-                stopBtn.id = 'headerStopRoamingBtn';
-                stopBtn.className = 'hidden bg-red-500 hover:bg-red-600 text-white text-xs font-bold py-2 px-4 rounded-lg transition shadow-md ml-2';
-                stopBtn.textContent = 'Stop Roaming';
-                stopBtn.onclick = stopRoaming;
-                header.appendChild(stopBtn);
+            const tourBtn = document.getElementById('startTourButton');
+            if (tourBtn) {
+                tourBtn.textContent = "Stop Roaming";
+                tourBtn.onclick = stopRoaming;
+                tourBtn.classList.replace('bg-emerald-500', 'bg-red-500');
+                tourBtn.classList.replace('hover:bg-emerald-600', 'hover:bg-red-600');
             }
-            stopBtn.classList.remove('hidden');
 
             // Update Compass Button Status
             const compassBtn = document.getElementById('compassStatusBtn');
@@ -705,8 +699,13 @@
             // Update UI
             openTourPanel();
 
-            const stopBtn = document.getElementById('headerStopRoamingBtn');
-            if (stopBtn) stopBtn.classList.add('hidden');
+            const tourBtn = document.getElementById('startTourButton');
+            if (tourBtn) {
+                tourBtn.textContent = "Start Tour";
+                tourBtn.onclick = openTourPanel;
+                tourBtn.classList.replace('bg-red-500', 'bg-emerald-500');
+                tourBtn.classList.replace('hover:bg-red-600', 'hover:bg-emerald-600');
+            }
 
             const compassBtn = document.getElementById('compassStatusBtn');
             if (compassBtn) {
@@ -730,7 +729,7 @@
             // Center on user
             if (userMarker) {
                 const latLng = userMarker.getLatLng();
-                map.setView(latLng, map.getZoom(), { animate: false });
+                map.setView(latLng, 18, { animate: false }); // Zoom 18
 
                 // Update FOV Cone Visual
                 updateFOVCone(latLng, currentHeading);
