@@ -153,7 +153,8 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.17</span>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.18</span>
+                </h1>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -1489,131 +1490,46 @@
 
 
         const fetchWikipediaLandmarks = async (lat, lon) => {
-            if (isFetching) return;
-            isFetching = true;
-            landmarkMarkers.clearLayers();
-            tourPoints = [];
+            // Use CirrusSearch with nearcoord and haswbstatement to filter for buildings/structures
+            // P31=Q41176 (Building) OR P31=Q811979 (Architectural Structure)
+            const radius = "10km";
+            const query = `nearcoord:${radius},${lat},${lon} (haswbstatement:P31=Q41176 OR haswbstatement:P31=Q811979)`;
 
-            // Wikipedia API limit is 10,000 meters (approx 6.2 miles). 
-            // We cannot search 10 miles (16km) in a single call.
-            // Wikipedia API limit is 10,000 meters (approx 6.2 miles). 
-            const radiusMeters = 10000;
-            let allPages = [];
-            let continueToken = null;
-            let fetchCount = 0;
-            const MAX_FETCHES = 20; // Fetch up to 10,000 raw results (20 * 500) to simulate "filtering before limit"
+            const apiUrl = `${WIKIPEDIA_API_URL}?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=50&prop=coordinates|pageimages|extracts|pageprops|info&pithumbsize=200&exintro=1&explaintext=1&inprop=url&format=json&origin=*`;
 
             try {
-                document.getElementById('tourStatus').textContent = "Scanning deep into the archives...";
+                console.log("Fetching landmarks with Smart Search...");
+                const data = await fetchWithRetry(apiUrl);
 
-                do {
-                    let url = `${WIKIPEDIA_API_URL}?action=query&list=geosearch&gsradius=${radiusMeters}&gscoord=${lat}|${lon}&gslimit=500&format=json&origin=*`;
-
-                    if (continueToken) {
-                        // Append continue parameters if they exist
-                        for (const key in continueToken) {
-                            url += `&${key}=${encodeURIComponent(continueToken[key])}`;
-                        }
-                    }
-
-                    // Update UI to show progress
-                    if (fetchCount > 0) {
-                        document.getElementById('tourStatus').textContent = `Scanning area... (Found ${allPages.length} items so far)`;
-                    }
-
-                    console.log(`Fetching batch ${fetchCount + 1}:`, url);
-                    const data = await fetchWithRetry(url);
-
-                    const pages = data.query?.geosearch || [];
-                    allPages = allPages.concat(pages);
-
-                    // Check for continuation
-                    if (data.continue) {
-                        continueToken = data.continue;
-                    } else {
-                        continueToken = null;
-                    }
-
-                    fetchCount++;
-
-                } while (continueToken && fetchCount < MAX_FETCHES);
-
-                console.log("Total raw pages found:", allPages.length);
-
-                // Strict filtering for "statue", "house", or "building"
-                const filteredPages = allPages.filter(p => {
-                    const title = p.title.toLowerCase();
-                    return title.includes('statue') || title.includes('house') || title.includes('building');
-                });
-
-                console.log("Filtered pages:", filteredPages.length);
-
-                if (filteredPages.length === 0) {
-                    alert(`Debug: Scanned ${allPages.length} raw items, but 0 matched 'statue', 'house', or 'building'. Try moving the map.`);
+                if (!data.query || !data.query.pages) {
+                    console.warn("No landmarks found with Smart Search.");
+                    return [];
                 }
 
-                // Extract page IDs for image fetching
-                const pageIds = filteredPages.map(p => p.pageid).join('|');
-                let pageImages = {};
+                const pages = Object.values(data.query.pages);
+                console.log(`Found ${pages.length} landmarks.`);
 
-                if (pageIds) {
-                    // Fetch images for the filtered pages
-                    // Split into chunks of 50 (API limit for titles/pageids) if necessary, 
-                    // but for now we'll assume filtered count is manageable or just take the first 50 if it's huge.
-                    // Actually, let's just do one batch for simplicity and speed.
-                    // Reduced thumbnail size to 200px for faster mobile loading
-                    const imageApiUrl = `${WIKIPEDIA_API_URL}?action=query&prop=pageimages&pithumbsize=200&pageids=${pageIds}&format=json&origin=*`;
+                // Map to our internal format
+                return pages.map(p => {
+                    // Ensure we have coordinates
+                    if (!p.coordinates || p.coordinates.length === 0) return null;
 
-                    try {
-                        const imgData = await fetchWithRetry(imageApiUrl);
-                        const pagesWithImages = imgData.query?.pages || {};
-
-                        // Map pageid to thumbnail URL
-                        Object.values(pagesWithImages).forEach(p => {
-                            if (p.thumbnail && p.thumbnail.source) {
-                                pageImages[p.pageid] = p.thumbnail.source;
-                            }
-                        });
-                    } catch (imgError) {
-                        console.warn("Failed to fetch images:", imgError);
-                    }
-                }
-
-                // Fetch descriptions and metadata for knowledge panel
-                let pageDetails = {};
-                if (pageIds) {
-                    const detailsApiUrl = `${WIKIPEDIA_API_URL}?action=query&prop=extracts|pageprops|info&exintro=1&explaintext=1&inprop=url&pageids=${pageIds}&format=json&origin=*`;
-
-                    try {
-                        const detailsData = await fetchWithRetry(detailsApiUrl);
-                        const pagesWithDetails = detailsData.query?.pages || {};
-
-                        Object.values(pagesWithDetails).forEach(p => {
-                            pageDetails[p.pageid] = {
-                                extract: p.extract || "No description available.",
-                                url: p.fullurl || `https://en.wikipedia.org/?curid=${p.pageid}`,
-                                // Try to extract construction date from pageprops
-                                constructionDate: p.pageprops?.['wikibase-shortdesc'] || null
-                            };
-                        });
-                    } catch (detailsError) {
-                        console.warn("Failed to fetch details:", detailsError);
-                    }
-                }
-
-                filteredPages.forEach(p => {
-                    const imageUrl = pageImages[p.pageid] || null;
-                    const details = pageDetails[p.pageid] || {};
-                    pinLandmark(p.lat, p.lon, p.title, `https://en.wikipedia.org/?curid=${p.pageid}`, imageUrl, details);
-                });
-
-                isFetching = false;
-                document.getElementById('tourStatus').textContent = `Found ${filteredPages.length} landmarks (scanned ${allPages.length} locations).`;
+                    return {
+                        pageid: p.pageid,
+                        title: p.title,
+                        lat: p.coordinates[0].lat,
+                        lon: p.coordinates[0].lon,
+                        dist: 0, // We don't get distance from search, but we calculate it later
+                        imageUrl: p.thumbnail ? p.thumbnail.source : null,
+                        extract: p.extract || "No description available.",
+                        url: p.fullurl || `https://en.wikipedia.org/?curid=${p.pageid}`,
+                        constructionDate: p.pageprops?.['wikibase-shortdesc'] || null
+                    };
+                }).filter(p => p !== null); // Remove items without coordinates
 
             } catch (error) {
-                console.error("Wikipedia GeoSearch Error:", error);
-                showMessage("Data Error", "Could not fetch landmark data from Wikipedia.");
-                isFetching = false;
+                console.error("Smart Search Error:", error);
+                throw error;
             }
         };
 
