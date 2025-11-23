@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.36</span>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.37</span>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -926,7 +926,8 @@
                     // Auto-open panel
                     // We need to find the marker ID if possible, or just pass 0
                     const markerId = closestTarget.marker ? closestTarget.marker._leaflet_id : 0;
-                    openKnowledgePanel(closestTarget.title, markerId);
+                    // Pass coordinates directly to ensure compass works
+                    openKnowledgePanel(closestTarget.title, markerId, closestTarget.lat, closestTarget.lon);
 
                     // Vibrate if supported
                     if (navigator.vibrate) navigator.vibrate(200);
@@ -1062,10 +1063,10 @@
 
                 const distanceToStep = getDistance(userLat, userLon, stepLat, stepLon);
 
-                // If the user is close enough (e.g., within 20m) and we haven't checked this one, 
+                // If the user is close enough (e.g., within 20m) and we haven't checked this one,
                 // we treat the next one as the current target.
                 if (distanceToStep > 20) {
-                    // Since we iterate sequentially, the first step we find that is > 20m away 
+                    // Since we iterate sequentially, the first step we find that is > 20m away
                     // from the maneuver point is the 'next' one to aim for.
                     if (distanceToStep < minDistance) {
                         minDistance = distanceToStep;
@@ -1401,141 +1402,138 @@
             }
         };
 
-        const openKnowledgePanel = async (title, markerId) => {
-            // Find the landmark in tourPoints
-            const landmark = tourPoints.find(p => p.title === title);
-            if (!landmark) {
-                console.error("Landmark not found:", title);
-                return;
-            }
+        // Open Knowledge Panel
+        const openKnowledgePanel = async (title, markerId = 0, lat = null, lon = null) => {
+            try {
+                // Close tour panel if open
+                closeTourPanel();
 
-            // Close tour panel if open
-            closeTourPanel();
+                // Set Title
+                document.getElementById('knowledgePanelTitle').textContent = title;
 
-            // Populate panel
-            document.getElementById('knowledgePanelTitle').textContent = landmark.title;
+                // Reset Image & Date
+                const img = document.getElementById('knowledgePanelImage');
+                const imgContainer = document.getElementById('knowledgePanelImageContainer');
+                const dateEl = document.getElementById('knowledgePanelDate');
 
-            // Image
-            const imageContainer = document.getElementById('knowledgePanelImageContainer');
-            const image = document.getElementById('knowledgePanelImage');
-            if (landmark.imageUrl) {
-                image.src = landmark.imageUrl;
-                image.alt = landmark.title;
-                imageContainer.classList.remove('hidden');
-            } else {
-                imageContainer.classList.add('hidden');
-            }
+                img.src = '';
+                imgContainer.classList.add('hidden');
+                dateEl.textContent = '';
+                dateEl.classList.add('hidden');
 
-            // Construction date
-            const dateElement = document.getElementById('knowledgePanelDate');
-            if (landmark.constructionDate) {
-                dateElement.textContent = landmark.constructionDate;
-                dateElement.classList.remove('hidden');
-            } else {
-                dateElement.classList.add('hidden');
-            }
+                // Show Loading in Content
+                document.getElementById('knowledgePanelDescription').innerHTML = '<p class="text-gray-500 italic">Loading details...</p>';
+                document.getElementById('knowledgePanelLink').href = '#';
 
-            // Description & AI Summary Logic
-            const descriptionContainer = document.getElementById('knowledgePanelDescription');
-            // Use saved key or hardcoded default
-            const apiKey = localStorage.getItem('geminiApiKey') || "AIzaSyBiCOtYlbx4FyHaZVrwDo0XkBrGDMyVp7w";
+                // Store location for compass
+                // Priority:
+                // 1. Direct coordinates passed (Most reliable)
+                // 2. Lookup by title/ID (Fallback)
 
-            // Start with the standard extract
-            descriptionContainer.innerHTML = `<p>${landmark.extract}</p>`;
+                if (lat !== null && lon !== null) {
+                    currentLandmarkLocation = { lat: parseFloat(lat), lon: parseFloat(lon) };
+                } else {
+                    // Fallback Lookup
+                    let compassTarget = tourPoints.find(p => p.title === title);
+                    if (!compassTarget && markerId) {
+                        compassTarget = tourPoints.find(p => p.marker && p.marker._leaflet_id == markerId);
+                    }
+                    if (!compassTarget) {
+                        const lowerTitle = title.toLowerCase().trim();
+                        compassTarget = tourPoints.find(p => p.title.toLowerCase().trim() === lowerTitle);
+                    }
 
-            // Wikipedia link
-            document.getElementById('knowledgePanelLink').href = landmark.fullUrl;
-
-            // Store location for compass
-            // Robust Lookup:
-            // 1. Try exact title match
-            // 2. Try loose ID match (string vs number)
-            // 3. Try case-insensitive title match
-
-            let compassTarget = tourPoints.find(p => p.title === title);
-
-            if (!compassTarget && markerId) {
-                // Loose equality for ID to handle string/number mismatch
-                compassTarget = tourPoints.find(p => p.marker && p.marker._leaflet_id == markerId);
-            }
-
-            if (!compassTarget) {
-                // Fallback: Case-insensitive title match
-                const lowerTitle = title.toLowerCase().trim();
-                compassTarget = tourPoints.find(p => p.title.toLowerCase().trim() === lowerTitle);
-            }
-
-            if (compassTarget) {
-                currentLandmarkLocation = { lat: compassTarget.lat, lon: compassTarget.lon };
+                    if (compassTarget) {
+                        currentLandmarkLocation = { lat: compassTarget.lat, lon: compassTarget.lon };
+                    } else {
+                        currentLandmarkLocation = null;
+                    }
+                }
 
                 // Force an immediate update if we have user location
-                if (userMarker) {
+                if (currentLandmarkLocation && userMarker) {
                     updatePanelCompass(userMarker.getLatLng(), currentHeading);
                 }
-            } else {
-                currentLandmarkLocation = null;
-            }
 
-            // Show Panel
-            const panel = document.getElementById('knowledgePanel');
-            panel.classList.remove('translate-y-full', 'opacity-0');
+                // Show Panel
+                const panel = document.getElementById('knowledgePanel');
+                panel.classList.remove('translate-y-full', 'opacity-0');
 
-            // Reset Compass
-            const arrow = document.getElementById('panelCompassArrow');
-            if (arrow) arrow.style.transform = 'rotate(0deg)';
-            const textPath = document.getElementById('compassTextPath');
-            if (textPath) textPath.textContent = '...';
+                // Reset Compass
+                const arrow = document.getElementById('panelCompassArrow');
+                if (arrow) arrow.style.transform = 'rotate(0deg)';
+                const textPath = document.getElementById('compassTextPath');
+                if (textPath) textPath.textContent = '...';
 
-            // Trigger AI Summary if Key Exists
-            if (apiKey) {
-                // Extract pageId from the URL (it's stored as curid=...) or we can find it in tourPoints if we stored it.
-                // We didn't explicitly store pageId in tourPoints, but we can parse it from the URL or just pass it if we update pinLandmark.
-                // Actually, let's update pinLandmark to store pageId to be safe.
-                // For now, let's try to extract it from the fullUrl if possible, or just use the title to find it in our previous data?
-                // Wait, we have the `landmark` object which came from `tourPoints`.
-                // In `fetchWikipediaLandmarks`, we pushed to `tourPoints`.
-                // Let's check if we stored `pageid`. We didn't. We only stored `url`.
-                // The URL is `https://en.wikipedia.org/?curid=${p.pageid}`.
-
-                let pageId = null;
-                try {
-                    const urlObj = new URL(landmark.url);
-                    pageId = urlObj.searchParams.get('curid');
-                } catch (e) {
-                    console.warn("Could not parse pageId from URL", landmark.url);
+                // Find the landmark in tourPoints for other details
+                const landmark = tourPoints.find(p => p.title === title);
+                if (!landmark) {
+                    console.error("Landmark not found:", title);
+                    document.getElementById('knowledgePanelDescription').innerHTML = '<p class="text-red-500">Error: Landmark details not found.</p>';
+                    return;
                 }
 
-                if (pageId) {
-                    const loadingMsg = document.createElement('p');
-                    loadingMsg.className = "text-sm text-indigo-600 font-semibold mt-2 animate-pulse";
-                    loadingMsg.textContent = "✨ Generating AI Summary...";
-                    descriptionContainer.appendChild(loadingMsg);
+                // Populate panel with landmark details
+                if (landmark.imageUrl) {
+                    img.src = landmark.imageUrl;
+                    img.alt = landmark.title;
+                    imgContainer.classList.remove('hidden');
+                }
+                if (landmark.constructionDate) {
+                    dateEl.textContent = landmark.constructionDate;
+                    dateEl.classList.remove('hidden');
+                }
+                document.getElementById('knowledgePanelDescription').innerHTML = `<p>${landmark.extract}</p>`;
+                document.getElementById('knowledgePanelLink').href = landmark.fullUrl;
 
+                // Trigger AI Summary if Key Exists
+                const apiKey = localStorage.getItem('geminiApiKey') || "AIzaSyBiCOtYlbx4FyHaZVrwDo0XkBrGDMyVp7w";
+                if (apiKey) {
+                    let pageId = null;
                     try {
-                        const fullText = await fetchFullWikipediaContent(pageId);
-                        if (fullText) {
-                            const summary = await generateGeminiSummary(fullText, apiKey);
-                            if (summary) {
-                                descriptionContainer.innerHTML = `<p class="font-medium text-gray-800 border-l-4 border-indigo-500 pl-3 bg-indigo-50 py-2 pr-2 rounded-r-lg mb-2">✨ ${summary}</p>`;
+                        const urlObj = new URL(landmark.url);
+                        pageId = urlObj.searchParams.get('curid');
+                    } catch (e) {
+                        console.warn("Could not parse pageId from URL", landmark.url);
+                    }
+
+                    if (pageId) {
+                        const loadingMsg = document.createElement('p');
+                        loadingMsg.className = "text-sm text-indigo-600 font-semibold mt-2 animate-pulse";
+                        loadingMsg.textContent = "✨ Generating AI Summary...";
+                        document.getElementById('knowledgePanelDescription').appendChild(loadingMsg);
+
+                        try {
+                            const fullText = await fetchFullWikipediaContent(pageId);
+                            if (fullText) {
+                                const summary = await generateGeminiSummary(fullText, apiKey);
+                                if (summary) {
+                                    document.getElementById('knowledgePanelDescription').innerHTML = `<p class="font-medium text-gray-800 border-l-4 border-indigo-500 pl-3 bg-indigo-50 py-2 pr-2 rounded-r-lg mb-2">✨ ${summary}</p>`;
+                                } else {
+                                    loadingMsg.remove();
+                                }
                             } else {
                                 loadingMsg.remove();
                             }
-                        } else {
-                            loadingMsg.remove();
+                        } catch (error) {
+                            console.error("AI Summary failed:", error);
+                            loadingMsg.textContent = `⚠️ Error: ${error.message}`;
+                            loadingMsg.classList.remove('animate-pulse');
+                            loadingMsg.classList.add('text-red-500');
                         }
-                    } catch (error) {
-                        console.error("AI Summary failed:", error);
-                        loadingMsg.textContent = `⚠️ Error: ${error.message}`;
-                        loadingMsg.classList.remove('animate-pulse');
-                        loadingMsg.classList.add('text-red-500');
                     }
+                } else {
+                    // Optional: Add a prompt to add API key
+                    const prompt = document.createElement('p');
+                    prompt.className = "text-xs text-gray-400 mt-2 italic";
+                    prompt.innerHTML = `Want AI summaries? <button onclick="openTourPanel(); switchTourTab('settings')" class="text-indigo-500 hover:underline">Add Gemini API Key</button>`;
+                    document.getElementById('knowledgePanelDescription').appendChild(prompt);
                 }
-            } else {
-                // Optional: Add a prompt to add API key
-                const prompt = document.createElement('p');
-                prompt.className = "text-xs text-gray-400 mt-2 italic";
-                prompt.innerHTML = `Want AI summaries? <button onclick="openTourPanel(); switchTourTab('settings')" class="text-indigo-500 hover:underline">Add Gemini API Key</button>`;
-                descriptionContainer.appendChild(prompt);
+            } catch (error) {
+                console.error("Error opening knowledge panel:", error);
+                document.getElementById('knowledgePanelTitle').textContent = "Error";
+                document.getElementById('knowledgePanelDescription').innerHTML = `<p class="text-red-500">Failed to load details: ${error.message}</p>`;
+                document.getElementById('knowledgePanel').classList.remove('translate-y-full', 'opacity-0');
             }
         };
 
@@ -1659,7 +1657,7 @@
                     <div class="p-2">
                         <h4 class="font-semibold text-xs text-gray-800 mb-1 line-clamp-2 h-8">${point.title}</h4>
                         <p class="text-xs text-gray-500 mb-1">${distanceMiles} mi</p>
-                        <button onclick="toggleLandmarkSelection(${point.pageid})" 
+                        <button onclick="toggleLandmarkSelection(${point.pageid})"
                             id="btn-${index}"
                             class="${isSelected ? 'bg-red-500 hover:bg-red-600' : 'bg-indigo-600 hover:bg-indigo-700'} text-white text-xs font-bold py-1.5 px-2 rounded-lg w-full transition">
                             ${isSelected ? 'Remove' : 'Add'}
@@ -1985,7 +1983,7 @@
 
             popupHtml += `
                 <div class="font-bold text-indigo-700 mb-2">${title}</div>
-                <button onclick="openKnowledgePanel('${title.replace(/'/g, "\\'")}', ${marker._leaflet_id})" 
+                <button onclick="openKnowledgePanel('${title.replace(/'/g, "\\'")}', ${marker._leaflet_id}, ${lat}, ${lon})"
                     class="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-2 px-4 rounded-lg transition">
                     Learn More
                 </button>
