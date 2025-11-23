@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.30</span>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.31</span>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -611,6 +611,19 @@
         let roamInterval = null;
         let currentHeading = 0;
         let lastTriggeredLandmark = null;
+        let roamCenterOffset = 0;
+
+        const updateRoamOffset = () => {
+            const header = document.querySelector('header');
+            const headerHeight = header ? header.offsetHeight : 0;
+            const screenHeight = window.innerHeight;
+            // Target Y is center of the space below header
+            const targetY = headerHeight + (screenHeight - headerHeight) / 2;
+            const centerY = screenHeight / 2;
+            // Offset is how much we need to shift the center UP (so subtract this from Y)
+            // If targetY > centerY (marker is lower), offset is positive.
+            roamCenterOffset = targetY - centerY;
+        };
 
         const startRoaming = async () => {
             // Request permission for iOS 13+
@@ -628,6 +641,10 @@
 
             isRoaming = true;
             window.addEventListener('deviceorientation', handleOrientation);
+            window.addEventListener('resize', updateRoamOffset);
+
+            // Calculate initial offset
+            updateRoamOffset();
 
             // Start FOV Loop
             roamInterval = setInterval(checkFOV, 1000); // Check every second
@@ -673,6 +690,7 @@
         const stopRoaming = () => {
             isRoaming = false;
             window.removeEventListener('deviceorientation', handleOrientation);
+            window.removeEventListener('resize', updateRoamOffset);
             clearInterval(roamInterval);
 
             // Reset Map Rotation & Scale (Just in case)
@@ -726,10 +744,19 @@
             // NO ROTATION - Map stays North-Up
             // We only track heading for the FOV cone and trigger logic
 
-            // Center on user
+            // Center on user with offset
             if (userMarker) {
                 const latLng = userMarker.getLatLng();
-                map.setView(latLng, 18, { animate: false }); // Zoom 18
+                const zoom = 18;
+
+                // Calculate target center by applying offset
+                // We want the user marker to be 'roamCenterOffset' pixels BELOW the center
+                // So the map center must be 'roamCenterOffset' pixels ABOVE the user marker
+                const point = map.project(latLng, zoom);
+                const targetPoint = point.subtract([0, roamCenterOffset]);
+                const targetCenter = map.unproject(targetPoint, zoom);
+
+                map.setView(targetCenter, zoom, { animate: false });
 
                 // Update FOV Cone Visual
                 updateFOVCone(latLng, currentHeading);
