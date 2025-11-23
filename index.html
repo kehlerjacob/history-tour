@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.38</span>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.39</span>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -335,7 +335,7 @@
                             </defs>
                             <text width="100" text-anchor="middle">
                                 <textPath xlink:href="#curve" startOffset="50%" id="compassTextPath"
-                                    class="text-[10px] font-bold fill-indigo-700 uppercase tracking-widest">
+                                    class="text-[12px] font-bold fill-indigo-700 uppercase tracking-wider">
                                     ...
                                 </textPath>
                             </text>
@@ -343,7 +343,7 @@
 
                         <!-- Arrow Icon -->
                         <div id="panelCompassArrow"
-                            class="absolute inset-0 flex items-center justify-center transition-transform duration-100 ease-linear origin-center">
+                            class="absolute inset-0 flex items-center justify-center transition-transform duration-75 ease-linear origin-center">
                             <svg class="w-8 h-8 text-indigo-600 fill-current" viewBox="0 0 24 24">
                                 <path
                                     d="M12 2L4.5 20.29C4.24 20.89 4.81 21.5 5.43 21.27L12 18.5L18.57 21.27C19.19 21.5 19.76 20.89 19.5 20.29L12 2Z" />
@@ -442,7 +442,7 @@
             <div class="flex items-start space-x-3 mb-2">
                 <svg id="navInstructionIcon" class="w-6 h-6 flex-shrink-0 mt-1" fill="currentColor" viewBox="0 0 24 24">
                     <path
-                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.41-7-7.38 0-.47.05-.93.14-1.39l5.86 5.86v2.91zm5.93-5.07l-5.86-5.86c.46-.09.92-.14 1.39-.14 3.97 0 6.89 3.05 7.38 7zm-5.93-10.79l5.86 5.86c-.46.09-.92-.14-1.39-.14-3.97 0-6.89-3.05-7.38-7zm-5.93 5.07l5.86 5.86c-.46.09-.92-.14-1.39-.14-3.97 0-6.89-3.05-7.38-7z" />
+                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.41-7-7.38 0-.47.05-.93.14-1.39l5.86 5.86v2.91zm5.93-5.07l-5.86-5.86c.46-.09.92-.14 1.39-.14 3.97 0 6.89 3.05 7.38 7zm-5.93-10.79l5.86 5.86c-.46-.09-.92-.14-1.39-.14-3.97 0-6.89-3.05-7.38-7zm-5.93 5.07l5.86 5.86c-.46.09-.92-.14-1.39-.14-3.97 0-6.89-3.05-7.38-7z" />
                 </svg>
                 <h2 id="currentNavInstruction" class="text-xl sm:text-2xl font-semibold leading-tight">Waiting for
                     Tour...</h2>
@@ -595,48 +595,76 @@
         // --- END UTILITY FUNCTION ---
 
 
-        // --- UPDATED: SENSOR DATA HANDLER (Now updates DOM directly for smoothness) ---
-        /**
-         * Listens to deviceorientation event and updates the global heading variable 
-         * AND applies rotation to the arrow for smooth, high-frequency updates.
-         */
-        const handleCompassUpdate = (event) => {
-            let magneticHeading = null;
-            const arrow = document.getElementById('userDirectionArrow');
-            const locationStatusText = document.getElementById('locationStatusText');
+        // --- UNIFIED ORIENTATION HANDLER ---
+        let isOrientationPending = false;
+        let pendingOrientationEvent = null;
 
+        const handleDeviceOrientation = (event) => {
+            pendingOrientationEvent = event;
+            if (!isOrientationPending) {
+                isOrientationPending = true;
+                requestAnimationFrame(processOrientationUpdate);
+            }
+        };
 
-            // 1. Check for webkitCompassHeading (best accuracy on iOS Safari)
+        const processOrientationUpdate = () => {
+            if (!pendingOrientationEvent) {
+                isOrientationPending = false;
+                return;
+            }
+
+            const event = pendingOrientationEvent;
+
+            // 1. Calculate Heading
+            let heading = null;
             if (event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
-                magneticHeading = event.webkitCompassHeading;
-            }
-            // 2. Fallback to standard alpha (needs adjustment based on screen orientation)
-            else if (event.alpha !== undefined && event.alpha !== null) {
-                let alpha = event.alpha;
-
-                // Calculate magnetic heading (360 - alpha) and normalize
-                magneticHeading = (360 - alpha + 360) % 360;
+                heading = event.webkitCompassHeading;
+            } else if (event.alpha !== undefined && event.alpha !== null) {
+                heading = (360 - event.alpha + 360) % 360;
             }
 
-            if (magneticHeading !== null) {
-                currentSensorHeading = magneticHeading;
+            if (heading !== null) {
+                currentHeading = heading;
+                currentSensorHeading = heading;
 
-                // Apply rotation to the arrow
-                const pointerRotation = magneticHeading;
-                const cardinal = getCardinalDirection(magneticHeading);
+                // 2. Update Main User Arrow (Header/Map)
+                const arrow = document.getElementById('userDirectionArrow');
+                const locationStatusText = document.getElementById('locationStatusText');
 
-                arrow.style.transform = `rotate(${pointerRotation}deg)`;
-
-                // --- MODIFICATION: Simplified status text to only show heading ---
-                const headingText = `${cardinal} (${magneticHeading.toFixed(1)}°)`;
+                if (arrow) arrow.style.transform = `rotate(${heading}deg)`;
 
                 if (locationStatusText) {
-                    // Update the status text with the current heading only
-                    locationStatusText.innerHTML = `<span class="text-indigo-600 font-bold">${headingText}</span>`;
+                    const cardinal = getCardinalDirection(heading);
+                    locationStatusText.innerHTML = `<span class="text-indigo-600 font-bold">${cardinal} (${heading.toFixed(1)}°)</span>`;
                 }
-                // --- END MODIFICATION ---
+
+                // 3. Update Map Elements (FOV & Panel Compass)
+                if (userMarker) {
+                    const latLng = userMarker.getLatLng();
+
+                    // Update FOV Cone
+                    if (isRoaming) {
+                        updateFOVCone(latLng, heading);
+
+                        // Restore Roam Mode Centering
+                        // Calculate target center by applying offset
+                        // We want the user marker to be 'roamCenterOffset' pixels BELOW the center
+                        // So the map center must be 'roamCenterOffset' pixels ABOVE the user marker
+                        const zoom = 18;
+                        const point = map.project(latLng, zoom);
+                        const targetPoint = point.subtract([0, roamCenterOffset]);
+                        const targetCenter = map.unproject(targetPoint, zoom);
+
+                        map.setView(targetCenter, zoom, { animate: false });
+                    }
+
+                    // Update Panel Compass
+                    updatePanelCompass(latLng, heading);
+                }
             }
-        }
+
+            isOrientationPending = false;
+        };
 
         // --- ROAM MODE LOGIC ---
 
@@ -673,7 +701,7 @@
             }
 
             isRoaming = true;
-            window.addEventListener('deviceorientation', handleOrientation);
+            window.addEventListener('deviceorientation', handleDeviceOrientation); // Use unified handler
             window.addEventListener('resize', updateRoamOffset);
 
             // Calculate initial offset
@@ -722,7 +750,7 @@
 
         const stopRoaming = () => {
             isRoaming = false;
-            window.removeEventListener('deviceorientation', handleOrientation);
+            window.removeEventListener('deviceorientation', handleDeviceOrientation); // Use unified handler
             window.removeEventListener('resize', updateRoamOffset);
             clearInterval(roamInterval);
 
@@ -763,34 +791,6 @@
                 compassBtn.textContent = "Compass Inactive";
                 compassBtn.classList.replace('text-green-600', 'text-gray-500');
                 compassBtn.classList.replace('bg-green-100', 'bg-gray-100');
-            }
-        };
-        const handleOrientation = (event) => {
-            let heading = event.webkitCompassHeading || (event.alpha !== null ? (360 - event.alpha + 360) % 360 : null);
-            currentHeading = heading;
-
-            // NO ROTATION - Map stays North-Up
-            // We only track heading for the FOV cone and trigger logic
-
-            // Center on user with offset
-            if (userMarker && heading !== null) {
-                const latLng = userMarker.getLatLng();
-                const zoom = 18;
-
-                // Calculate target center by applying offset
-                // We want the user marker to be 'roamCenterOffset' pixels BELOW the center
-                // So the map center must be 'roamCenterOffset' pixels ABOVE the user marker
-                const point = map.project(latLng, zoom);
-                const targetPoint = point.subtract([0, roamCenterOffset]);
-                const targetCenter = map.unproject(targetPoint, zoom);
-
-                map.setView(targetCenter, zoom, { animate: false });
-
-                // Update FOV Cone Visual
-                updateFOVCone(latLng, currentHeading);
-
-                // Update Panel Compass if active
-                updatePanelCompass(latLng, currentHeading);
             }
         };
         // --- VISUAL FOV CONE ---
@@ -967,7 +967,7 @@
                         if (permissionState === 'granted') {
                             isCompassPermissionRequested = true;
                             // SUCCESS: Attach the listener
-                            window.addEventListener('deviceorientation', handleCompassUpdate);
+                            window.addEventListener('deviceorientation', handleDeviceOrientation);
                             // Turn indicator green
                             statusIndicator.className = 'w-2 h-2 bg-green-500 rounded-full animate-pulse flex-shrink-0';
                         } else {
@@ -984,12 +984,14 @@
                     });
             } else {
                 // Non-iOS or older browsers: assume permission is implicit.
-                // Attach listener immediately.
+                // Unified Orientation Handler
                 if (window.DeviceOrientationEvent) {
-                    window.addEventListener('deviceorientation', handleCompassUpdate);
+                    window.addEventListener('deviceorientation', handleDeviceOrientation);
                     isCompassPermissionRequested = true;
-                    // Turn indicator green
+                    // Turn indicator green since compass is available
                     statusIndicator.className = 'w-2 h-2 bg-green-500 rounded-full animate-pulse flex-shrink-0';
+                } else {
+                    console.warn("DeviceOrientationEvent not supported.");
                 }
                 btn.classList.add('hidden');
                 btnInStatus.classList.add('hidden');
