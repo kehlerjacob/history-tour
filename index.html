@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.35</span>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.36</span>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -324,8 +324,8 @@
                 <div class="flex items-center gap-3">
                     <!-- Compass Widget -->
                     <div class="relative w-16 h-16 flex-shrink-0">
-                        <!-- Purple Circle Background -->
-                        <div class="absolute inset-0 bg-purple-100 rounded-full border-2 border-purple-500 box-border">
+                        <!-- Indigo Circle Background -->
+                        <div class="absolute inset-0 bg-indigo-100 rounded-full border-2 border-indigo-500 box-border">
                         </div>
 
                         <!-- Curved Text SVG -->
@@ -335,7 +335,7 @@
                             </defs>
                             <text width="100" text-anchor="middle">
                                 <textPath xlink:href="#curve" startOffset="50%" id="compassTextPath"
-                                    class="text-[10px] font-bold fill-purple-700 uppercase tracking-widest">
+                                    class="text-[10px] font-bold fill-indigo-700 uppercase tracking-widest">
                                     ...
                                 </textPath>
                             </text>
@@ -344,7 +344,7 @@
                         <!-- Arrow Icon -->
                         <div id="panelCompassArrow"
                             class="absolute inset-0 flex items-center justify-center transition-transform duration-100 ease-linear origin-center">
-                            <svg class="w-8 h-8 text-purple-600 fill-current" viewBox="0 0 24 24">
+                            <svg class="w-8 h-8 text-indigo-600 fill-current" viewBox="0 0 24 24">
                                 <path
                                     d="M12 2L4.5 20.29C4.24 20.89 4.81 21.5 5.43 21.27L12 18.5L18.57 21.27C19.19 21.5 19.76 20.89 19.5 20.29L12 2Z" />
                             </svg>
@@ -1454,8 +1454,30 @@
             document.getElementById('knowledgePanelLink').href = landmark.fullUrl;
 
             // Store location for compass
-            if (landmark) { // 'landmark' is already defined and checked for null above
-                currentLandmarkLocation = { lat: landmark.lat, lon: landmark.lon };
+            // Try finding by title first, then by markerId if available
+            // Note: 'landmark' is already declared above, so we reuse it or create a new scope variable if needed.
+            // Actually, 'landmark' above was the raw data passed to populateLandmarkCards? No, wait.
+            // Let's look at the function scope.
+            // Ah, 'landmark' IS declared above: "const landmark = tourPoints.find..."
+            // But wait, in the previous code block I saw:
+            // "const landmark = tourPoints.find(p => p.title === title);"
+            // And then I added:
+            // "let landmark = tourPoints.find..."
+
+            // The issue is I pasted the lookup logic twice or conflicted with existing.
+            // Let's just use a different variable name to be safe and clear.
+
+            let compassTarget = tourPoints.find(p => p.title === title);
+            if (!compassTarget && markerId) {
+                compassTarget = tourPoints.find(p => p.marker && p.marker._leaflet_id === markerId);
+            }
+
+            if (compassTarget) {
+                currentLandmarkLocation = { lat: compassTarget.lat, lon: compassTarget.lon };
+                // Force an immediate update if we have user location
+                if (userMarker) {
+                    updatePanelCompass(userMarker.getLatLng(), currentHeading);
+                }
             } else {
                 currentLandmarkLocation = null;
             }
