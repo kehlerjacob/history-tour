@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.31</span>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.32</span>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -762,21 +762,16 @@
                 updateFOVCone(latLng, currentHeading);
             }
         };
-
         // --- VISUAL FOV CONE ---
         let fovCone = null;
 
         const updateFOVCone = (center, heading) => {
-            const radius = 80; // 80 meters (matches MAX_DIST_METERS)
-            const angle = 45; // +/- 45 degrees (matches FOV_ANGLE)
+            const radius = 46; // 150 feet ~= 46 meters
+            const angle = 30; // +/- 30 degrees (Narrower)
 
-            // Calculate vertices of the cone (triangle)
+            // Calculate vertices of the cone (Sector/Pie Slice)
             // Point 1: Center (User)
-            const p1 = center;
-
-            // Calculate bearing for left and right edges
-            const bearingLeft = (heading - angle + 360) % 360;
-            const bearingRight = (heading + angle + 360) % 360;
+            const latLngs = [center];
 
             // Helper to get destination point given distance and bearing
             const getDestinationPoint = (lat, lng, dist, brng) => {
@@ -793,11 +788,26 @@
                 return [lat2 * (180 / Math.PI), lng2 * (180 / Math.PI)];
             };
 
-            const p2 = getDestinationPoint(center.lat, center.lng, radius, bearingLeft);
-            const p3 = getDestinationPoint(center.lat, center.lng, radius, bearingRight);
+            // Generate points along the arc
+            const startBearing = (heading - angle + 360) % 360;
+            const endBearing = (heading + angle + 360) % 360;
 
-            // Create or update polygon
-            const latLngs = [p1, p2, p3];
+            // We need to handle the wrap-around at 360
+            let currentB = startBearing;
+            const step = 5; // Degree step for smoothness
+
+            // If end is smaller than start, we crossed 360
+            const totalSweep = angle * 2;
+
+            for (let i = 0; i <= totalSweep; i += step) {
+                const b = (startBearing + i) % 360;
+                latLngs.push(getDestinationPoint(center.lat, center.lng, radius, b));
+            }
+            // Ensure we hit the exact end
+            latLngs.push(getDestinationPoint(center.lat, center.lng, radius, endBearing));
+
+            // Close the polygon (back to center is implicit in Leaflet polygon but good to be explicit order)
+            // Leaflet closes it automatically.
 
             if (fovCone) {
                 fovCone.setLatLngs(latLngs);
@@ -816,8 +826,8 @@
             if (!userMarker) return;
 
             const userPos = userMarker.getLatLng();
-            const FOV_ANGLE = 45; // +/- 45 degrees
-            const MAX_DIST_METERS = 80; // Only identify things within 80m
+            const FOV_ANGLE = 30; // +/- 30 degrees
+            const MAX_DIST_METERS = 46; // 150 feet
 
             // Find closest landmark in FOV
             let closestTarget = null;
