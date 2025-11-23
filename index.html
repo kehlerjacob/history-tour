@@ -741,7 +741,7 @@
             map.touchZoom.enable();
             map.doubleClickZoom.enable();
             map.scrollWheelZoom.enable();
-            map.boxZoom.enable();
+            map.boxZoom.disable();
             map.keyboard.enable();
             if (map.tap) map.tap.enable();
 
@@ -862,13 +862,18 @@
         let currentLandmarkLocation = null;
 
         const updatePanelCompass = (userPos, heading) => {
-            if (!currentLandmarkLocation) return;
+            if (!currentLandmarkLocation) {
+                // console.log('[Compass Debug] updatePanelCompass called but no target.');
+                return;
+            }
 
             const dist = getDistance(userPos.lat, userPos.lng, currentLandmarkLocation.lat, currentLandmarkLocation.lon);
             const bearing = getBearing(userPos.lat, userPos.lng, currentLandmarkLocation.lat, currentLandmarkLocation.lon);
-            // If bearing is 90 (East) and heading is 0 (North), arrow should point 90 deg (Right)
-            // If bearing is 90 and heading is 90, arrow should point 0 deg (Up)
+
+            // Calculate relative rotation for the arrow
             let arrowRotation = bearing - heading;
+
+            console.log(`[Compass Debug] Update. User: ${userPos.lat.toFixed(5)},${userPos.lng.toFixed(5)} | Target: ${currentLandmarkLocation.lat.toFixed(5)},${currentLandmarkLocation.lon.toFixed(5)} | Dist: ${dist}m | Bear: ${bearing} | Head: ${heading} | Rot: ${arrowRotation}`);
 
             // Update Arrow Rotation
             const arrow = document.getElementById('panelCompassArrow');
@@ -879,8 +884,6 @@
             // Update Distance Text
             const textPath = document.getElementById('compassTextPath');
             if (textPath) {
-                // Convert to feet/miles if needed, for now meters or feet based on user pref?
-                // User asked for "150ft" range, so let's show feet.
                 const feet = Math.round(dist * 3.28084);
                 textPath.textContent = `${feet} ft`;
             }
@@ -1430,10 +1433,14 @@
                 // 1. Direct coordinates passed (Most reliable)
                 // 2. Lookup by title/ID (Fallback)
 
+                console.log(`[Compass Debug] Opening panel. Input Lat: ${lat}, Lon: ${lon}`);
+
                 if (lat !== null && lon !== null) {
                     currentLandmarkLocation = { lat: parseFloat(lat), lon: parseFloat(lon) };
+                    console.log(`[Compass Debug] Set target from direct coords:`, currentLandmarkLocation);
                 } else {
                     // Fallback Lookup
+                    console.log(`[Compass Debug] No direct coords. Trying lookup for: ${title}`);
                     let compassTarget = tourPoints.find(p => p.title === title);
                     if (!compassTarget && markerId) {
                         compassTarget = tourPoints.find(p => p.marker && p.marker._leaflet_id == markerId);
@@ -1445,14 +1452,19 @@
 
                     if (compassTarget) {
                         currentLandmarkLocation = { lat: compassTarget.lat, lon: compassTarget.lon };
+                        console.log(`[Compass Debug] Found target via lookup:`, currentLandmarkLocation);
                     } else {
+                        console.warn(`[Compass Debug] Target lookup FAILED for ${title}`);
                         currentLandmarkLocation = null;
                     }
                 }
 
                 // Force an immediate update if we have user location
                 if (currentLandmarkLocation && userMarker) {
+                    console.log(`[Compass Debug] Forcing immediate update.`);
                     updatePanelCompass(userMarker.getLatLng(), currentHeading);
+                } else {
+                    console.log(`[Compass Debug] Cannot force update. UserMarker: ${!!userMarker}, Target: ${!!currentLandmarkLocation}`);
                 }
 
                 // Show Panel
