@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.34</span>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.35</span>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -319,10 +319,43 @@
         class="fixed inset-x-0 bottom-0 bg-white text-gray-800 p-4 sm:p-6 shadow-2xl rounded-t-3xl transition-all duration-300 transform translate-y-full opacity-0 z-[4000] max-h-[70vh] overflow-y-auto">
         <div class="max-w-4xl mx-auto flex flex-col">
 
-            <!-- Header with Close Button -->
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-2xl font-bold text-indigo-700" id="knowledgePanelTitle">Landmark Details</h3>
-                <button onclick="closeKnowledgePanel()" class="text-gray-400 hover:text-gray-600 transition">
+            <!-- Header with Compass and Close Button -->
+            <div class="flex justify-between items-start mb-4">
+                <div class="flex items-center gap-3">
+                    <!-- Compass Widget -->
+                    <div class="relative w-16 h-16 flex-shrink-0">
+                        <!-- Purple Circle Background -->
+                        <div class="absolute inset-0 bg-purple-100 rounded-full border-2 border-purple-500 box-border">
+                        </div>
+
+                        <!-- Curved Text SVG -->
+                        <svg class="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100">
+                            <defs>
+                                <path id="curve" d="M 20, 50 a 30,30 0 1,1 60,0" />
+                            </defs>
+                            <text width="100" text-anchor="middle">
+                                <textPath xlink:href="#curve" startOffset="50%" id="compassTextPath"
+                                    class="text-[10px] font-bold fill-purple-700 uppercase tracking-widest">
+                                    ...
+                                </textPath>
+                            </text>
+                        </svg>
+
+                        <!-- Arrow Icon -->
+                        <div id="panelCompassArrow"
+                            class="absolute inset-0 flex items-center justify-center transition-transform duration-100 ease-linear origin-center">
+                            <svg class="w-8 h-8 text-purple-600 fill-current" viewBox="0 0 24 24">
+                                <path
+                                    d="M12 2L4.5 20.29C4.24 20.89 4.81 21.5 5.43 21.27L12 18.5L18.57 21.27C19.19 21.5 19.76 20.89 19.5 20.29L12 2Z" />
+                            </svg>
+                        </div>
+                    </div>
+
+                    <h3 class="text-2xl font-bold text-indigo-700 leading-tight" id="knowledgePanelTitle">Landmark
+                        Details</h3>
+                </div>
+
+                <button onclick="closeKnowledgePanel()" class="text-gray-400 hover:text-gray-600 transition p-2">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
                         </path>
@@ -760,6 +793,9 @@
 
                 // Update FOV Cone Visual
                 updateFOVCone(latLng, currentHeading);
+
+                // Update Panel Compass if active
+                updatePanelCompass(latLng, currentHeading);
             }
         };
         // --- VISUAL FOV CONE ---
@@ -819,6 +855,36 @@
                     weight: 1,
                     dashArray: '5, 5'
                 }).addTo(map);
+            }
+        };
+
+        // --- PANEL COMPASS LOGIC ---
+        let currentLandmarkLocation = null;
+
+        const updatePanelCompass = (userPos, heading) => {
+            if (!currentLandmarkLocation) return;
+
+            const dist = getDistance(userPos.lat, userPos.lng, currentLandmarkLocation.lat, currentLandmarkLocation.lon);
+            const bearing = getBearing(userPos.lat, userPos.lng, currentLandmarkLocation.lat, currentLandmarkLocation.lon);
+
+            // Calculate relative rotation for the arrow
+            // If bearing is 90 (East) and heading is 0 (North), arrow should point 90 deg (Right)
+            // If bearing is 90 and heading is 90, arrow should point 0 deg (Up)
+            let arrowRotation = bearing - heading;
+
+            // Update Arrow Rotation
+            const arrow = document.getElementById('panelCompassArrow');
+            if (arrow) {
+                arrow.style.transform = `rotate(${arrowRotation}deg)`;
+            }
+
+            // Update Distance Text
+            const textPath = document.getElementById('compassTextPath');
+            if (textPath) {
+                // Convert to feet/miles if needed, for now meters or feet based on user pref?
+                // User asked for "150ft" range, so let's show feet.
+                const feet = Math.round(dist * 3.28084);
+                textPath.textContent = `${feet} ft`;
             }
         };
 
@@ -1387,9 +1453,22 @@
             // Wikipedia link
             document.getElementById('knowledgePanelLink').href = landmark.fullUrl;
 
-            // Show panel
+            // Store location for compass
+            if (landmark) { // 'landmark' is already defined and checked for null above
+                currentLandmarkLocation = { lat: landmark.lat, lon: landmark.lon };
+            } else {
+                currentLandmarkLocation = null;
+            }
+
+            // Show Panel
             const panel = document.getElementById('knowledgePanel');
             panel.classList.remove('translate-y-full', 'opacity-0');
+
+            // Reset Compass
+            const arrow = document.getElementById('panelCompassArrow');
+            if (arrow) arrow.style.transform = 'rotate(0deg)';
+            const textPath = document.getElementById('compassTextPath');
+            if (textPath) textPath.textContent = '...';
 
             // Trigger AI Summary if Key Exists
             if (apiKey) {
