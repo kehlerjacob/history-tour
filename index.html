@@ -153,7 +153,7 @@
         <div class="flex flex-col md:flex-row items-center justify-between gap-3">
             <div class="text-center md:text-left">
                 <h1 class="text-xl font-bold text-white leading-tight">Historic Places Explorer <span
-                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.37</span>
+                        class="bg-yellow-400 text-blue-900 text-xs font-bold px-2 py-1 rounded-md ml-2">v5.38</span>
                 </h1>
                 <p class="text-indigo-200 text-xs hidden sm:block">Real-time Wikipedia Landmarks & Tour Guide</p>
             </div>
@@ -765,20 +765,15 @@
                 compassBtn.classList.replace('bg-green-100', 'bg-gray-100');
             }
         };
-
         const handleOrientation = (event) => {
-            // iOS uses webkitCompassHeading, others use alpha
-            if (event.webkitCompassHeading) {
-                currentHeading = event.webkitCompassHeading;
-            } else if (event.alpha) {
-                currentHeading = 360 - event.alpha;
-            }
+            let heading = event.webkitCompassHeading || (event.alpha !== null ? (360 - event.alpha + 360) % 360 : null);
+            currentHeading = heading;
 
             // NO ROTATION - Map stays North-Up
             // We only track heading for the FOV cone and trigger logic
 
             // Center on user with offset
-            if (userMarker) {
+            if (userMarker && heading !== null) {
                 const latLng = userMarker.getLatLng();
                 const zoom = 18;
 
@@ -863,7 +858,6 @@
 
         const updatePanelCompass = (userPos, heading) => {
             if (!currentLandmarkLocation) {
-                // console.log('[Compass Debug] updatePanelCompass called but no target.');
                 return;
             }
 
@@ -872,8 +866,6 @@
 
             // Calculate relative rotation for the arrow
             let arrowRotation = bearing - heading;
-
-            console.log(`[Compass Debug] Update. User: ${userPos.lat.toFixed(5)},${userPos.lng.toFixed(5)} | Target: ${currentLandmarkLocation.lat.toFixed(5)},${currentLandmarkLocation.lon.toFixed(5)} | Dist: ${dist}m | Bear: ${bearing} | Head: ${heading} | Rot: ${arrowRotation}`);
 
             // Update Arrow Rotation
             const arrow = document.getElementById('panelCompassArrow');
@@ -1280,6 +1272,11 @@
 
             // Handle tour progression and instruction updates
             checkTourProgress(newLatLong);
+
+            // Update Panel Compass if active (even if not in roam mode, if a panel is open)
+            if (currentLandmarkLocation && displayHeading !== null) {
+                updatePanelCompass({ lat: latitude, lng: longitude }, displayHeading);
+            }
         };
 
         // Function to update the progressive route as user moves
@@ -1433,14 +1430,10 @@
                 // 1. Direct coordinates passed (Most reliable)
                 // 2. Lookup by title/ID (Fallback)
 
-                console.log(`[Compass Debug] Opening panel. Input Lat: ${lat}, Lon: ${lon}`);
-
                 if (lat !== null && lon !== null) {
                     currentLandmarkLocation = { lat: parseFloat(lat), lon: parseFloat(lon) };
-                    console.log(`[Compass Debug] Set target from direct coords:`, currentLandmarkLocation);
                 } else {
                     // Fallback Lookup
-                    console.log(`[Compass Debug] No direct coords. Trying lookup for: ${title}`);
                     let compassTarget = tourPoints.find(p => p.title === title);
                     if (!compassTarget && markerId) {
                         compassTarget = tourPoints.find(p => p.marker && p.marker._leaflet_id == markerId);
@@ -1452,19 +1445,14 @@
 
                     if (compassTarget) {
                         currentLandmarkLocation = { lat: compassTarget.lat, lon: compassTarget.lon };
-                        console.log(`[Compass Debug] Found target via lookup:`, currentLandmarkLocation);
                     } else {
-                        console.warn(`[Compass Debug] Target lookup FAILED for ${title}`);
                         currentLandmarkLocation = null;
                     }
                 }
 
                 // Force an immediate update if we have user location
-                if (currentLandmarkLocation && userMarker) {
-                    console.log(`[Compass Debug] Forcing immediate update.`);
+                if (currentLandmarkLocation && userMarker && currentHeading !== null) {
                     updatePanelCompass(userMarker.getLatLng(), currentHeading);
-                } else {
-                    console.log(`[Compass Debug] Cannot force update. UserMarker: ${!!userMarker}, Target: ${!!currentLandmarkLocation}`);
                 }
 
                 // Show Panel
